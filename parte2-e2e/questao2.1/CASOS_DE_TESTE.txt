@@ -1,0 +1,479 @@
+================================================================================
+QUESTÃO 2.1 - FLUXO DE CHECKOUT (E2E)
+Casos de teste e estratégia
+================================================================================
+
+Autor: Jorge Ferreira
+Aplicação: https://www.saucedemo.com (Swag Labs)
+Teoria:    parte2-e2e/questao2.1/RESPOSTA_TEORICA.md
+
+Este documento especifica os cenários. A implementação automatizada está em
+parte2-e2e/questao2.1/testes/checkout-flow.spec.js, e os IDs abaixo são os
+mesmos usados nos títulos dos testes.
+
+
+--------------------------------------------------------------------------------
+1. ESCOPO
+--------------------------------------------------------------------------------
+
+Itens do enunciado (usados na rastreabilidade):
+
+  I1  Fluxo completo de checkout: login -> adicionar produtos -> checkout ->
+      finalizar.
+  I2  Geração dinâmica de dados a cada execução (nome, sobrenome, CEP).
+  I3  Validação da confirmação do pedido.
+  I4  Limpeza após cada teste (cookies e localStorage).
+  I5  Cupom de desconto de uso único (contexto da questão).
+  I6  Processamento do pagamento (contexto da questão).
+
+Dentro do escopo:
+  - Login com standard_user, inclusão e remoção de produtos, badge do carrinho.
+  - Formulário "Checkout: Your Information" (campos obrigatórios).
+  - Resumo "Checkout: Overview": itens, pagamento, entrega e totais.
+  - Confirmação "Checkout: Complete!" e esvaziamento do carrinho.
+  - Cancelar e continuar comprando durante o checkout.
+  - Isolamento entre testes: sessão e carrinho não vazam de um teste para outro.
+
+Fora do escopo:
+  - Cupom de desconto (I5) e pagamento real (I6): o SauceDemo não possui
+    nenhum dos dois (ver Gaps). São tratados na resposta teórica 2.1.a.
+  - E-mail de confirmação: o SauceDemo não envia e-mail. Tratado em 2.1.b.
+  - Demais usuários de demonstração (problem_user, error_user,
+    performance_glitch_user, visual_user): simulam defeitos propositais e
+    pertencem a outro objetivo de teste. locked_out_user aparece apenas como
+    negativo de login.
+  - Ordenação, detalhe de produto, menu lateral (exceto como apoio),
+    acessibilidade, responsividade e performance.
+
+
+--------------------------------------------------------------------------------
+2. REGRAS IDENTIFICADAS
+--------------------------------------------------------------------------------
+
+Do enunciado:
+  RN01  O login usa standard_user / secret_sauce.
+  RN02  Os dados do comprador (nome, sobrenome, CEP) são gerados a cada
+        execução, sem valores fixos no teste.
+  RN03  Após finalizar, a confirmação do pedido deve ser validada.
+  RN04  Cada teste termina com cookies e localStorage limpos.
+  RN05  O cupom de desconto só pode ser usado uma vez (não aplicável ao
+        SauceDemo, ver G01).
+
+Observadas no SauceDemo em 06/10/2026 (dependência externa, não do enunciado;
+conferidas no código publicado da aplicação):
+  RI01  Login inválido: "Epic sadface: Username and password do not match any
+        user in this service". Usuário bloqueado: "Epic sadface: Sorry, this
+        user has been locked out."
+  RI02  A sessão é o cookie "session-username" (validade de 10 minutos). Sem
+        ele, páginas internas voltam ao login com "Epic sadface: You can only
+        access '<página>' when you are logged in."
+  RI03  O carrinho fica no localStorage "cart-contents" (lista de IDs de
+        produto, na ordem de inclusão). O badge do carrinho
+        (data-test="shopping-cart-badge") mostra a quantidade e não aparece com
+        o carrinho vazio.
+  RI04  Ao adicionar um produto, o botão "Add to cart" vira "Remove"
+        (data-test="add-to-cart-<produto>" / "remove-<produto>").
+  RI05  First Name, Last Name e Postal Code são obrigatórios e validados nessa
+        ordem, uma mensagem por vez: "Error: First Name is required",
+        "Error: Last Name is required", "Error: Postal Code is required".
+  RI06  Overview: Item total = soma dos preços; Tax = 8% do Item total,
+        arredondado em 2 casas; Total = Item total + Tax. Exibidos em
+        data-test="subtotal-label", "tax-label" e "total-label".
+  RI07  Overview exibe pagamento fixo "SauceCard #31337" e entrega "Free Pony
+        Express Delivery!". Não há processamento de pagamento.
+  RI08  Finish leva a /checkout-complete.html com o título "Checkout:
+        Complete!", o cabeçalho "Thank you for your order!" e o texto "Your
+        order has been dispatched, and will arrive just as fast as the pony
+        can get there!". O carrinho é esvaziado ("cart-contents" removido).
+  RI09  Na confirmação, "Back Home" (data-test="back-to-products") volta para
+        "Products". Há também o botão "Generate PDF order" com o recibo.
+  RI10  Cancel em "Your Information" volta ao carrinho; Cancel em "Overview"
+        volta a "Products"; "Continue Shopping" volta a "Products". Nos três
+        casos o carrinho é mantido.
+
+Regras de projeto (decisão de estratégia):
+  RP01  Os dados dinâmicos são gerados com @faker-js/faker; a seed é
+        registrada no log para reproduzir uma falha.
+  RP02  Os valores esperados de totais vêm do preço exibido de cada item, e
+        não do valor digitado no teste, mais uma tabela de referência fixa
+        (CT-CK-03) como controle.
+  RP03  A limpeza roda no afterEach de todos os testes. No bloco de checkout,
+        roda também no beforeEach (defensiva), para que um teste interrompido
+        não contamine o próximo. O bloco de isolamento não tem beforeEach, para
+        provar que só o afterEach basta.
+
+
+--------------------------------------------------------------------------------
+3. ESTRATÉGIA (ORIENTADA A RISCO)
+--------------------------------------------------------------------------------
+
+Riscos considerados:
+
+  R01  CRÍTICO  Pedido não finaliza ou a confirmação não aparece: o fluxo
+                principal de receita fica quebrado.
+  R02  CRÍTICO  Total cobrado diferente de Item total + Tax, ou itens do
+                resumo diferentes do carrinho.
+  R03  ALTO     Pedido finalizado sem dados obrigatórios do comprador.
+  R04  ALTO     Estado vazando entre testes (sessão ou carrinho), gerando
+                falso positivo ou falha dependente da ordem de execução.
+  R05  ALTO     Dados fixos repetidos mascarando defeitos e, em sistemas com
+                regra de unicidade (cupom), quebrando a reexecução.
+  R06  MÉDIO    Carrinho não esvaziado após o pedido (risco de pedido
+                duplicado).
+  R07  MÉDIO    Cancelar ou continuar comprando perdendo os itens do carrinho.
+  R08  MÉDIO    Badge do carrinho divergente da quantidade real.
+  R09  BAIXO    Acesso a páginas internas sem sessão.
+
+Decisões:
+
+  1. Dois E2E completos pela interface provam o fluxo de ponta a ponta, como
+     pede o enunciado: CT-CK-01 (1 produto) e CT-CK-02 (3 produtos, com nome e
+     preço comparados aos da vitrine). Os demais cenários podem preparar o
+     estado direto no navegador (cookie "session-username" e localStorage
+     "cart-contents") e abrir a página do passo testado. Isso reduz tempo e
+     falhas de etapas que não são o objetivo daquele cenário.
+  2. Pirâmide: o SauceDemo não tem API de checkout (tudo roda no navegador),
+     então não há camada de API para descer. Em um produto real, totais,
+     impostos e cupom seriam validados em teste de API ou unitário, e o E2E
+     ficaria só com o fluxo e a exibição.
+  3. Seletores por data-test, que é o contrato estável da aplicação. Nada de
+     XPath ou de texto de botão como seletor.
+  4. Sincronização por estado (URL, título, elemento visível), sem cy.wait
+     com tempo fixo (bloqueado pelo lint do projeto).
+  5. Isolamento: cy.clearAllCookies, cy.clearAllLocalStorage e
+     cy.clearAllSessionStorage, em dois desenhos no mesmo spec:
+     - checkout (CT-CK-*): limpeza no beforeEach (defensiva, RP03) e no
+       afterEach (enunciado), sem verificação nos hooks. Aqui o Cypress também
+       isola o estado entre testes (testIsolation, padrão);
+     - isolamento (CT-IS-*): testIsolation desligado e nenhum beforeEach de
+       limpeza. Só o afterEach limpa e, em seguida, verifica que não sobrou
+       cookie, localStorage nem sessionStorage. Cada teste do bloco começa
+       limpo apenas por esse afterEach, então é ele que está sendo provado.
+       Se a verificação falhar, só o restante desse bloco é pulado.
+  6. Dados dinâmicos: nome, sobrenome e CEP do faker em cada teste, com seed
+     registrada (RP01). Os valores não são impressos como fixos no cenário.
+
+Prioridades:
+  P0  Falha impede o fluxo principal ou causa resultado financeiro errado.
+  P1  Comportamento importante ou risco significativo.
+  P2  Navegação, borda e complementares.
+
+Tags: @smoke (P0 rápidos), @e2e, @checkout, @carrinho, @formulario,
+      @isolamento, @negativo.
+
+
+--------------------------------------------------------------------------------
+4. RESUMO DOS CASOS
+--------------------------------------------------------------------------------
+
+ID        Título                                           Tipo      Prior. Camada     Item
+--------  -----------------------------------------------  --------  ------ ---------  -----
+CT-CK-01  Fluxo completo com 1 produto e dados dinâmicos   Positivo  P0     E2E UI     I1-I3
+CT-CK-02  Fluxo completo com N produtos                    Positivo  P0     E2E UI     I1, I3
+CT-CK-03  Totais do resumo (Item total + Tax = Total)      Positivo  P0     E2E UI*    I1
+CT-CK-04  Carrinho esvaziado após finalizar                Positivo  P1     E2E UI*    I3
+CT-CK-05  Dados do comprador diferentes a cada execução    Positivo  P1     E2E UI*    I2
+CT-CK-06  Campos obrigatórios do formulário                Negativo  P0     E2E UI*    I1
+CT-CK-07  Badge acompanha inclusão e remoção               Positivo  P1     E2E UI*    I1
+CT-CK-08  Remover item no carrinho antes do checkout       Positivo  P1     E2E UI*    I1
+CT-CK-09  Cancelar em "Your Information" volta ao carrinho Positivo  P2     E2E UI*    I1
+CT-CK-10  Cancelar no "Overview" não finaliza o pedido     Positivo  P1     E2E UI*    I1
+CT-CK-11  Continuar comprando e incluir mais produtos      Positivo  P2     E2E UI*    I1
+CT-CK-12  Login inválido não acessa a loja                 Negativo  P2     E2E UI     I1
+CT-IS-01  Teste seguinte começa sem sessão e sem carrinho  Positivo  P0     E2E UI     I4
+CT-IS-02  Checkout sem sessão volta ao login               Negativo  P1     E2E UI     I4
+CT-IS-03  Checkout abandonado não vaza para o próximo    Borda     P2     E2E UI     I4
+
+(*) Estado inicial preparado direto no navegador (cookie e localStorage), sem
+    repetir o login e a inclusão de produtos pela interface.
+
+Totais: 15 casos | 11 positivos, 3 negativos, 1 de borda
+        P0: 5 | P1: 6 | P2: 4
+        Automatizáveis: 15 | Exploratório complementar: ver seção 9
+
+
+--------------------------------------------------------------------------------
+5. CASOS DETALHADOS
+--------------------------------------------------------------------------------
+
+Pré-condições gerais:
+  PC01  Acesso à internet para https://www.saucedemo.com.
+  PC02  Navegador sem cookies, localStorage e sessionStorage do domínio
+        (garantido pelo beforeEach no bloco de checkout e pelo afterEach do
+        teste anterior no bloco de isolamento, RP03).
+  PC03  Credenciais standard_user / secret_sauce em cy.env(), sem exibição da
+        senha no Command Log.
+  PC04  Dados do comprador gerados no início de cada teste (faker, RP01).
+
+
+Feature: Checkout no SauceDemo
+
+  Background:
+    Given o navegador está sem sessão e sem carrinho
+    And um comprador com nome, sobrenome e CEP gerados para este teste
+
+  CT-CK-01 | P0 | Positivo | E2E UI | I1, I2, I3 | R01 | @smoke
+  Scenario: Finalizar a compra de um produto com dados dinâmicos
+    Given o usuário faz login com "standard_user"
+    And está na página "Products"
+    When adiciona o produto "Sauce Labs Backpack" ao carrinho
+    And abre o carrinho e inicia o checkout
+    And informa o nome, o sobrenome e o CEP gerados
+    And continua para o resumo
+    Then o resumo deve listar somente "Sauce Labs Backpack"
+    And deve exibir o pagamento "SauceCard #31337"
+    And deve exibir a entrega "Free Pony Express Delivery!"
+    When finaliza o pedido
+    Then a página deve ser "Checkout: Complete!"
+    And deve exibir "Thank you for your order!"
+    And deve exibir "Your order has been dispatched, and will arrive just as
+      fast as the pony can get there!"
+
+  CT-CK-02 | P0 | Positivo | E2E UI | I1, I3 | R01, R02
+  Scenario: Finalizar a compra de vários produtos
+    Given o usuário está logado com "standard_user"
+    When adiciona "Sauce Labs Backpack", "Sauce Labs Bike Light" e
+      "Sauce Labs Bolt T-Shirt" ao carrinho
+    And conclui o checkout com os dados gerados
+    Then o resumo deve listar os 3 produtos, com nome e preço iguais aos da
+      página "Products"
+    And o Item total deve ser a soma dos 3 preços
+    And após finalizar deve exibir "Thank you for your order!"
+
+  CT-CK-03 | P0 | Positivo | E2E UI* | I1 | R02
+  Scenario Outline: Calcular os totais do resumo do pedido
+    Given o usuário está logado e o carrinho contém <produtos>
+    When avança até o resumo com os dados gerados
+    Then o Item total deve ser "$<item_total>"
+    And a Tax deve ser "$<tax>"
+    And o Total deve ser "$<total>"
+    And o Total deve ser igual a Item total + Tax
+    Examples:
+      | produtos                                    | item_total | tax   | total  |
+      | Sauce Labs Backpack                         | 29.99      | 2.40  | 32.39  |
+      | Sauce Labs Onesie                           | 7.99       | 0.64  | 8.63   |
+      | Sauce Labs Backpack + Sauce Labs Bike Light | 39.98      | 3.20  | 43.18  |
+      | os 6 produtos do catálogo                   | 129.94     | 10.40 | 140.34 |
+  Observação: os valores de referência foram calculados com os preços
+    exibidos em 06/10/2026 e a regra RI06. O Onesie cobre o arredondamento
+    para cima (0.6392 -> 0.64). Se o catálogo mudar de preço, o cenário falha
+    e sinaliza a mudança; a asserção "Total = Item total + Tax" continua
+    valendo para qualquer preço (RP02).
+
+  CT-CK-04 | P1 | Positivo | E2E UI* | I3 | R06
+  Scenario: Esvaziar o carrinho após finalizar o pedido
+    Given o usuário finalizou um pedido com 2 produtos
+    When está na página "Checkout: Complete!"
+    Then o badge do carrinho não deve ser exibido
+    And o localStorage não deve conter "cart-contents"
+    When volta para a loja por "Back Home"
+    Then a página deve ser "Products"
+    And todos os produtos devem exibir "Add to cart"
+
+  CT-CK-05 | P1 | Positivo | E2E UI* | I2 | R05
+  Scenario: Usar dados de comprador diferentes em cada execução
+    Given dois compradores gerados em testes diferentes
+    When cada um preenche o formulário "Checkout: Your Information"
+    Then nome, sobrenome e CEP de um não devem ser todos iguais aos do outro
+    And os campos devem conter exatamente os valores gerados
+    And a seed usada deve constar no log da execução
+  Observação: o SauceDemo não exibe os dados do comprador no resumo nem na
+    confirmação. A verificação é feita nos campos do formulário.
+
+  CT-CK-06 | P0 | Negativo | E2E UI* | I1 | R03 | @negativo
+  Scenario Outline: Impedir o avanço sem um campo obrigatório
+    Given o usuário está em "Checkout: Your Information" com 1 produto no
+      carrinho
+    When deixa vazio(s) <campos_vazios> e preenche os demais com dados gerados
+    And tenta continuar
+    Then deve permanecer em "Checkout: Your Information"
+    And deve exibir "<mensagem>"
+    Examples:
+      | campos_vazios               | mensagem                        |
+      | First Name                  | Error: First Name is required   |
+      | Last Name                   | Error: Last Name is required    |
+      | Postal Code                 | Error: Postal Code is required  |
+      | todos os campos             | Error: First Name is required   |
+  Observação: a última linha confirma a ordem de validação (RI05).
+
+  CT-CK-07 | P1 | Positivo | E2E UI* | I1 | R08
+  Scenario: Atualizar o badge do carrinho ao incluir e remover produtos
+    Given o usuário está logado e o carrinho está vazio
+    Then o badge do carrinho não deve ser exibido
+    When adiciona 2 produtos
+    Then o badge deve exibir "2"
+    And os botões desses produtos devem exibir "Remove"
+    When remove 1 dos produtos na página "Products"
+    Then o badge deve exibir "1"
+
+  CT-CK-08 | P1 | Positivo | E2E UI* | I1 | R02
+  Scenario: Remover um item no carrinho antes do checkout
+    Given o carrinho contém "Sauce Labs Backpack" e "Sauce Labs Bike Light"
+    When remove "Sauce Labs Bike Light" na página "Your Cart"
+    And avança até o resumo com os dados gerados
+    Then o resumo deve listar somente "Sauce Labs Backpack"
+    And o Item total deve ser "$29.99"
+
+  CT-CK-09 | P2 | Positivo | E2E UI* | I1 | R07
+  Scenario: Cancelar o preenchimento dos dados e voltar ao carrinho
+    Given o usuário está em "Checkout: Your Information" com 1 produto
+    When cancela
+    Then a página deve ser "Your Cart"
+    And o produto deve continuar no carrinho
+
+  CT-CK-10 | P1 | Positivo | E2E UI* | I1 | R01, R07
+  Scenario: Cancelar no resumo sem finalizar o pedido
+    Given o usuário está em "Checkout: Overview" com 2 produtos
+    When cancela
+    Then a página deve ser "Products"
+    And o badge deve continuar exibindo "2"
+    And a confirmação do pedido não deve ter sido exibida
+
+  CT-CK-11 | P2 | Positivo | E2E UI* | I1 | R07
+  Scenario: Continuar comprando e incluir mais um produto
+    Given o carrinho contém "Sauce Labs Backpack" e o usuário está em
+      "Your Cart"
+    When escolhe continuar comprando
+    And adiciona "Sauce Labs Bike Light"
+    Then o badge deve exibir "2"
+    And o carrinho deve listar os 2 produtos
+
+  CT-CK-12 | P2 | Negativo | E2E UI | I1 | - | @negativo
+  Scenario Outline: Recusar login inválido
+    When o usuário tenta entrar com <usuario> e <senha>
+    Then deve permanecer na página de login
+    And deve exibir "<mensagem>"
+    And a loja não deve abrir sem um login válido
+    Examples:
+      | usuario          | senha              | mensagem                                                                     |
+      | standard_user    | senha gerada       | Epic sadface: Username and password do not match any user in this service    |
+      | locked_out_user  | secret_sauce       | Epic sadface: Sorry, this user has been locked out.                          |
+  Observação: com senha inválida, o cookie "session-username" não é gravado.
+    Com usuário bloqueado, o SauceDemo grava o cookie antes de checar o
+    bloqueio. Por isso, o critério comum é a loja continuar fechada: abrir
+    "/inventory.html" volta ao login com "You can only access ...".
+
+
+Feature: Isolamento e limpeza entre testes
+
+  CT-IS-01 | P0 | Positivo | E2E UI | I4 | R04 | @smoke
+  Scenario: Começar o teste seguinte sem sessão e sem carrinho
+    Given um teste anterior fez login e deixou 2 produtos no carrinho
+    When a limpeza do afterEach é executada
+    Then não deve existir o cookie "session-username"
+    And o localStorage não deve conter "cart-contents"
+    When o próximo teste faz login com "standard_user"
+    Then o badge do carrinho não deve ser exibido
+  Observação: no código, são dois testes em sequência no bloco de
+    isolamento (testIsolation desligado, sem beforeEach). O primeiro deixa a
+    sessão e o carrinho; o segundo depende só do afterEach, não do resultado
+    do primeiro. Sem o afterEach, o segundo teste falha.
+
+  CT-IS-02 | P1 | Negativo | E2E UI | I4 | R04, R09
+  Scenario: Voltar ao login ao abrir o checkout sem sessão
+    Given o navegador está sem o cookie "session-username"
+    When o usuário abre "/checkout-step-one.html" diretamente
+    Then deve ser levado à página de login
+    And deve exibir "Epic sadface: You can only access
+      '/checkout-step-one.html' when you are logged in."
+
+  CT-IS-03 | P2 | Borda | E2E UI | I4 | R04
+  Scenario: Não levar um checkout abandonado para o próximo teste
+    Given um teste terminou no "Checkout: Overview" com 2 produtos no
+      carrinho e um item gravado no sessionStorage
+    When a limpeza do afterEach é executada
+    Then o próximo teste deve começar sem cookies, localStorage e
+      sessionStorage
+    And abrir "/checkout-step-two.html" deve levar ao login com "Epic
+      sadface: You can only access '/checkout-step-two.html' when you
+      are logged in."
+  Observação: o caso não provoca uma falha real, pois isso deixaria a suíte
+    vermelha. Que o afterEach roda mesmo com o teste falhando é garantia do
+    Mocha. Já uma execução interrompida (navegador fechado, timeout do
+    runner, erro no próprio hook) não conclui o afterEach; para isso o bloco
+    de checkout também limpa no beforeEach (RP03).
+
+
+--------------------------------------------------------------------------------
+6. MASSA DE TESTES
+--------------------------------------------------------------------------------
+
+  - Credenciais: standard_user / secret_sauce (do enunciado); locked_out_user
+    só no CT-CK-12.
+  - Comprador: nome (faker.person.firstName), sobrenome
+    (faker.person.lastName) e CEP (faker.location.zipCode) gerados por teste.
+    Seed registrada no log para reproduzir uma falha.
+  - Produtos e preços observados em 06/10/2026: Sauce Labs Backpack 29.99,
+    Bike Light 9.99, Bolt T-Shirt 15.99, Fleece Jacket 49.99, Onesie 7.99,
+    Test.allTheThings() T-Shirt (Red) 15.99.
+  - Senha inválida do CT-CK-12: gerada (nunca igual a secret_sauce).
+  - Estado preparado (*): cookie "session-username" = standard_user e
+    localStorage "cart-contents" com os IDs dos produtos.
+  - Limpeza: cookies, localStorage e sessionStorage antes e depois de cada
+    teste. Não há dados persistidos em servidor a limpar (o SauceDemo não
+    tem backend de pedidos).
+
+
+--------------------------------------------------------------------------------
+7. REGRESSÃO
+--------------------------------------------------------------------------------
+
+  Smoke (@smoke): CT-CK-01 e CT-IS-01.
+    Prova o fluxo de ponta a ponta e o isolamento, em menos de 1 minuto.
+  Regressão crítica: todos os P0 (CT-CK-01, 02, 03, 06; CT-IS-01).
+  Regressão completa: todos os casos.
+
+
+--------------------------------------------------------------------------------
+8. MATRIZ DE RASTREABILIDADE
+--------------------------------------------------------------------------------
+
+Item  Regras                 Riscos           Casos
+----  ---------------------  ---------------  -----------------------------------
+I1    RN01, RI01, RI03-RI07, R01, R02, R03,   CT-CK-01, CT-CK-02, CT-CK-03,
+      RI10, RP02             R07, R08         CT-CK-06, CT-CK-07, CT-CK-08,
+                                              CT-CK-09, CT-CK-10, CT-CK-11,
+                                              CT-CK-12
+I2    RN02, RP01             R05              CT-CK-01, CT-CK-05
+I3    RN03, RI08, RI09       R01, R06         CT-CK-01, CT-CK-02, CT-CK-04
+I4    RN04, RI02, RI03, RP03 R04, R09         CT-IS-01, CT-IS-02, CT-IS-03
+I5    RN05                   R05              Sem caso (G01); RESPOSTA_TEORICA
+                                              2.1.a
+I6    RI07                   R01              CT-CK-01 (exibição do meio de
+                                              pagamento); G02
+
+
+--------------------------------------------------------------------------------
+9. GAPS
+--------------------------------------------------------------------------------
+
+Gaps:
+  G01  O SauceDemo não tem cupom de desconto. A regra de uso único (RN05) não
+       é testável nesta aplicação; a estratégia está em 2.1.a.
+  G02  O SauceDemo não processa pagamento: "SauceCard #31337" é texto fixo.
+       Não há como testar recusa, timeout ou estorno.
+  G03  Não há e-mail nem número de pedido. A confirmação só pode ser validada
+       pela interface (e pelo PDF do recibo, não coberto). Ver 2.1.b.
+  G04  Os dados do comprador não aparecem no resumo nem na confirmação; não é
+       possível validar que o pedido foi gravado com eles (CT-CK-05 valida o
+       formulário).
+  G05  Comportamentos observados sem regra definida (exploratório, sem
+       asserção automatizada):
+       - o checkout é permitido com o carrinho vazio (totais $0);
+       - campos preenchidos só com espaços são aceitos;
+       - o CEP não tem validação de formato nem de tamanho.
+  G06  O SauceDemo é uma aplicação de demonstração de terceiros: textos,
+       preços e data-test podem mudar sem aviso, e os cenários falham
+       sinalizando a mudança.
+
+--------------------------------------------------------------------------------
+10. RESUMO DE COBERTURA
+--------------------------------------------------------------------------------
+
+  Itens do enunciado cobertos: I1, I2, I3, I4 (4 de 4 aplicáveis).
+    I5 (cupom) e I6 (pagamento) não existem no SauceDemo: tratados na teoria
+    e registrados como G01 e G02.
+  Regras cobertas: RN01-RN04, RI01-RI10, RP01-RP03. RN05 sem caso (G01).
+  Positivos: 11 | Negativos: 3 | Borda: 1.
+  Integrações: nenhuma integração de backend no checkout do SauceDemo.
+  Autenticação: login válido, inválido, usuário bloqueado e acesso sem sessão.
