@@ -1,0 +1,456 @@
+================================================================================
+QUESTÃO 1.1 - RATE LIMITING E AUTENTICAÇÃO COM TOKEN
+Casos de teste e estratégia
+================================================================================
+
+Autor: Jorge Ferreira
+Implementação: parte1-api/questao1.1/testes/api.spec.js
+               parte1-api/questao1.1/testes/rate-limit-destrutivo.spec.js (CT-RL-11)
+Helper:        parte1-api/questao1.1/testes/utils/api-helper.js
+Teoria:        parte1-api/questao1.1/RESPOSTA_TEORICA.md
+
+Execução:
+  npx cypress run --spec "parte1-api/questao1.1/**/*.spec.js"
+  npm run test:smoke                                   (somente @smoke)
+  npm run test:destrutivo                              (somente CT-RL-11, isolado)
+
+Os IDs abaixo são os mesmos usados nos títulos dos testes automatizados.
+
+
+--------------------------------------------------------------------------------
+1. ESCOPO
+--------------------------------------------------------------------------------
+
+Itens do enunciado (usados na rastreabilidade):
+
+  I1  Validar os headers X-RateLimit-Limit, X-RateLimit-Remaining e
+      X-RateLimit-Reset da GitHub API (GET /users/github).
+  I2  Detectar quando o rate limit foi atingido (403).
+  I3  Login no ReqRes (POST /api/login), obtendo o token e reutilizando-o em
+      requisição autenticada (GET /api/users/2 com Authorization: Bearer).
+  I4  Simular a expiração do token (TTL fixo de 2 minutos) e validar o
+      tratamento do erro.
+
+Dentro do escopo:
+  - Contrato e coerência dos headers de rate limit da GitHub API.
+  - Classificação de respostas 403/429 (rate limit x outras causas) e cálculo
+    do tempo de espera.
+  - Login, reutilização do token em cache, erros de login.
+  - Expiração do token pelo TTL, renovação automática e erro claro.
+
+Fora do escopo:
+  - Carga e concorrência contra as APIs públicas (seria abuso de serviço de
+    terceiros e não é controlável).
+  - Validação real de expiração no servidor: o token do ReqRes é fixo e não
+    expira (ver Gaps).
+  - Endpoints do GitHub com outros recursos de cota (search, graphql).
+
+
+--------------------------------------------------------------------------------
+2. REGRAS IDENTIFICADAS
+--------------------------------------------------------------------------------
+
+Do enunciado:
+  RN01  GitHub sem autenticação: 60 requisições por hora.
+  RN02  GitHub com autenticação: 5000 requisições por hora.
+  RN03  Ao exceder o limite, a GitHub API responde 403.
+  RN04  POST /api/login com credenciais válidas retorna um token.
+  RN05  O token é usado no header Authorization: Bearer {token}.
+  RN06  O token tem curta duração (simulada: 2 minutos) e deve ser reutilizado
+        enquanto válido, sem login a cada teste.
+
+Da documentação pública da GitHub API (comportamento verificável):
+  RI01  Respostas trazem X-RateLimit-Limit, -Remaining, -Used, -Reset (epoch
+        em segundos) e -Resource.
+  RI02  Limite primário excedido: 403 ou 429, Remaining = 0, mensagem
+        "API rate limit exceeded".
+  RI03  Limite secundário: 403 ou 429 com mensagem "secondary rate limit" e,
+        quando presente, Retry-After.
+
+Observadas no ReqRes em 06/10/2026 (dependência externa, não do enunciado):
+  RI04  Chamadas enviam x-api-key (chave gratuita reqres-free-v1).
+  RI05  Login sem senha: 400 {"error":"Missing password"}.
+  RI06  Login com usuário inexistente: 400 {"error":"user not found"}.
+  RI07  Authorization: Bearer em /api/users/2 é recusado com 401, inclusive
+        com o token do /login. Sem o header, o recurso responde 200.
+  RI08  O ReqRes também limita: 20 req/min e cota diária na chave gratuita.
+
+Regras de projeto (decisão de implementação):
+  RP01  Token expirado quando (agora - obtidoEm) >= TTL (borda fechada).
+  RP02  Token expirado é renovado antes de enviar a requisição autenticada.
+  RP03  Quem exige token válido sem renovar recebe erro claro:
+        "Token expirado: obtido há X ms, TTL de Y ms."
+  RP04  403 que não é de rate limit NÃO pode ser tratado como rate limit.
+
+
+--------------------------------------------------------------------------------
+3. ESTRATÉGIA (ORIENTADA A RISCO)
+--------------------------------------------------------------------------------
+
+Riscos considerados:
+
+  R01  CRÍTICO  Tratar qualquer 403 como rate limit (ou nenhum): esconde
+                falha de permissão ou deixa o bloqueio sem diagnóstico.
+  R02  ALTO     Headers de rate limit ausentes ou incoerentes: o cliente não
+                consegue se autorregular e é bloqueado.
+  R03  ALTO     Token reutilizado depois de expirar: chamadas falham com 401
+                em produção.
+  R04  ALTO     Login a cada teste: lentidão e consumo da cota do ReqRes
+                (limite diário da chave gratuita).
+  R05  MÉDIO    Cálculo errado do tempo de espera (Retry-After x Reset).
+  R06  MÉDIO    Erros de login sem mensagem clara.
+  R07  ALTO     Testes destrutivos ou instáveis: esgotar 60 req/h derruba os
+                demais testes do mesmo IP por até 1 hora.
+
+Decisões:
+
+  1. Pirâmide: a regra de decisão (classificar resposta, calcular espera,
+     expiração) é testada em funções puras com respostas simuladas (camada
+     "unitário", custo zero de cota, determinística). As chamadas reais validam
+     só o contrato.
+  2. cy.intercept não intercepta cy.request; por isso a simulação é feita
+     passando respostas simuladas diretamente às funções do helper.
+  3. Esgotamento real do GitHub (CT-RL-11) é opcional, anônimo e isolado.
+  4. Testes reais toleram a cota já esgotada no ambiente: os headers chegam
+     também no 403, e a classificação precisa ser coerente com o status.
+  5. Expiração simulada com relógio injetado no gerenciador de token
+     (sem cy.wait, sem esperar 2 minutos). cy.clock não se aplica: controla
+     só o relógio da aplicação no navegador.
+  6. Comparação do Reset com o header Date do servidor, não com o relógio
+     local, para não depender do ajuste do relógio da máquina.
+  7. Chamadas reais ao ReqRes por execução completa: 8.
+
+Prioridades:
+  P0  Falha impede o fluxo principal ou causa diagnóstico errado.
+  P1  Comportamento importante ou risco significativo.
+  P2  Borda e complementares.
+
+Tags: @smoke (P0 rápidos), @api (chamada real), @unitario (sem rede),
+      @rate-limit, @token, @destrutivo (opcional).
+
+
+--------------------------------------------------------------------------------
+4. RESUMO DOS CASOS
+--------------------------------------------------------------------------------
+
+ID        Título                                           Tipo      Prior. Camada     Item
+--------  -----------------------------------------------  --------  ------ ---------  ----
+CT-RL-01  Headers de rate limit presentes e coerentes      Positivo  P0     API real   I1
+CT-RL-02  Limite conforme autenticação (60 / 5000)         Positivo  P1     API real   I1
+CT-RL-03  Remaining decrementa a cada requisição           Positivo  P1     API real   I1
+CT-RL-04  403 + Remaining 0 = rate limit primário          Negativo  P0     Unitário   I2
+CT-RL-05  429 + Retry-After: espera pelo Retry-After       Negativo  P1     Unitário   I2
+CT-RL-06  403 de rate limit secundário                     Negativo  P1     Unitário   I2
+CT-RL-07  403 por permissão não é rate limit               Negativo  P0     Unitário   I2
+CT-RL-08  200 com Remaining 0 (última requisição)          Borda     P2     Unitário   I2
+CT-RL-09  Reset no passado: espera zero                    Borda     P2     Unitário   I2
+CT-RL-10  Classificação da resposta real coerente          Positivo  P1     API real   I1/I2
+CT-RL-11  Esgotamento real: 403 "API rate limit exceeded"  Negativo  P2     API real*  I2
+CT-TK-01  Login válido retorna token                       Positivo  P0     API real   I3
+CT-TK-02  Token reutilizado entre testes, sem novo login   Positivo  P0     API real   I3
+CT-TK-03  Token em cache enviado no Authorization          Positivo  P1     API real   I3
+CT-TK-04  Controle: /users/2 sem Bearer responde 200       Positivo  P2     API real   I3
+CT-TK-05  Login sem senha: 400 "Missing password"          Negativo  P1     API real   I3
+CT-TK-06  Login com usuário inexistente: 400               Negativo  P1     API real   I3
+CT-TK-07  Bordas do TTL (TTL-1 ms válido, TTL expirado)    Borda     P0     Unitário   I4
+CT-TK-08  Token reutilizado enquanto o TTL não venceu      Positivo  P1     API real   I4
+CT-TK-09  Token expirado detectado com erro claro          Negativo  P0     API real   I4
+CT-TK-10  Token expirado renovado automaticamente          Positivo  P0     API real   I4
+CT-TK-11  Classificação da resposta autenticada (401)      Negativo  P1     Unitário   I4
+
+(*) Desligado por padrão, em spec próprio. Executar com npm run test:destrutivo.
+
+Totais: 22 casos | 10 positivos, 9 negativos, 3 de borda
+        P0: 8 | P1: 10 | P2: 4
+        Unitários (sem rede): 8 | API real: 14 (1 opcional)
+
+
+--------------------------------------------------------------------------------
+5. CASOS DETALHADOS
+--------------------------------------------------------------------------------
+
+Pré-condições gerais:
+  PC01  Acesso à internet para api.github.com e reqres.in.
+  PC02  Configuração padrão do cypress.config.js (URLs em expose, TTL de
+        120000 ms, credenciais de demonstração em env).
+  PC03  GITHUB_TOKEN opcional: vazio = chamadas anônimas (60/h).
+
+
+Feature: Rate limit da GitHub API
+
+  CT-RL-01 | P0 | Positivo | API real | I1 | R02, R07
+  Pré-condição: PC01.
+  Scenario: Retornar os headers de rate limit com valores coerentes
+    Given a GitHub API está acessível
+    When o cliente consulta o usuário "github"
+    Then a resposta deve ser 200, ou 403/429 se a cota do ambiente já estiver
+      esgotada, com a classificação de bloqueio coerente com o status
+    And X-RateLimit-Limit deve ser um inteiro positivo
+    And X-RateLimit-Remaining deve estar entre 0 e o limite
+    And X-RateLimit-Used deve ser igual a Limit - Remaining
+    And X-RateLimit-Reset deve estar no futuro e no máximo 1 hora à frente
+      da data do servidor
+    And X-RateLimit-Resource deve ser "core"
+
+  CT-RL-02 | P1 | Positivo | API real | I1 | R02
+  Pré-condição: PC01, PC03.
+  Scenario: Aplicar o limite correspondente ao modo de autenticação
+    Given o GITHUB_TOKEN está vazio ou preenchido
+    When o cliente consulta o usuário "github"
+    Then X-RateLimit-Limit deve ser 60 sem token
+    And deve ser 5000 com token
+
+  CT-RL-03 | P1 | Positivo | API real | I1 | R02
+  Scenario: Decrementar o Remaining a cada requisição consumida
+    Given o cliente fez uma consulta e registrou o Remaining
+    When faz uma nova consulta na mesma janela
+    Then o Remaining deve ter diminuído pelo menos 1, sem ficar negativo
+    And o Reset deve ser o mesmo (mesma janela)
+  Observação: "pelo menos 1" porque outros processos do mesmo IP podem
+    consumir cota em paralelo.
+
+  CT-RL-04 | P0 | Negativo | Unitário | I2 | R01, R05
+  Scenario: Identificar 403 com Remaining 0 como rate limit primário
+    Given uma resposta 403 com Remaining 0, Used 60, Reset em 10 minutos
+      e a mensagem "API rate limit exceeded for 203.0.113.10."
+    When a resposta é analisada
+    Then deve ser classificada como rate limit primário
+    And a cota deve constar como esgotada
+    And a espera calculada deve ser 600000 ms
+
+  CT-RL-05 | P1 | Negativo | Unitário | I2 | R05
+  Scenario: Priorizar o Retry-After no cálculo da espera
+    Given uma resposta 429 com Retry-After 30 e um Reset em 10 minutos
+    When a resposta é analisada
+    Then deve ser classificada como rate limit
+    And a espera deve ser 30000 ms
+
+  CT-RL-06 | P1 | Negativo | Unitário | I2 | R01
+  Scenario: Identificar o rate limit secundário com cota primária disponível
+    Given uma resposta 403 com Remaining 42, Retry-After 60
+      e a mensagem "You have exceeded a secondary rate limit."
+    When a resposta é analisada
+    Then deve ser classificada como rate limit secundário
+    And a espera deve ser 60000 ms
+
+  CT-RL-07 | P0 | Negativo | Unitário | I2 | R01
+  Scenario: Não tratar como rate limit um 403 por falta de permissão
+    Given uma resposta 403 com Remaining 4990
+      e a mensagem "Resource not accessible by personal access token"
+    When a resposta é analisada
+    Then não deve ser classificada como rate limit
+    And o motivo deve ser "acesso negado", sem tempo de espera
+
+  CT-RL-08 | P2 | Borda | Unitário | I2 | R05
+  Scenario: Sinalizar cota esgotada na última requisição atendida
+    Given uma resposta 200 com Remaining 0
+    When a resposta é analisada
+    Then não deve ser classificada como bloqueada
+    And deve sinalizar que a cota está esgotada para a próxima chamada
+
+  CT-RL-09 | P2 | Borda | Unitário | I2 | R05
+  Scenario: Retornar espera zero quando o reset já passou
+    Given uma resposta 403 de rate limit com Reset 5 segundos no passado
+    When a resposta é analisada
+    Then a espera deve ser 0 ms
+
+  CT-RL-10 | P1 | Positivo | API real | I1, I2 | R01, R07
+  Scenario: Classificar a resposta real de forma coerente com a cota
+    Given a GitHub API está acessível
+    When o cliente consulta o usuário "github"
+    Then, se a resposta for 200, não deve estar classificada como bloqueada
+      e o corpo deve trazer o login "github"
+    And, se for 403/429, deve estar classificada como rate limit, com
+      mensagem citando rate limit e espera calculável
+
+  CT-RL-11 | P2 | Negativo | API real (opcional, destrutivo) | I2 | R01, R07
+  Pré-condição: npm run test:destrutivo (spec isolado) e cota anônima > 0,
+    verificada em GET /rate_limit (sem consumir cota). Consome a cota
+    anônima do IP por até 1 hora.
+  Scenario: Receber 403 ao exceder o limite anônimo real
+    Given o cliente faz chamadas anônimas consecutivas
+    When a cota de 60 requisições é excedida
+    Then a resposta deve ser 403, classificada como rate limit primário
+    And a mensagem deve conter "API rate limit exceeded"
+    And o Remaining deve ser 0
+    And a espera deve estar dentro da janela de 1 hora (relógio do servidor)
+    And a requisição anterior deve ter sido atendida (200) com Remaining 0
+    And o bloqueio deve ocorrer em no máximo (cota inicial + 1) requisições
+
+
+Feature: Token do ReqRes
+
+  Background:
+    Given um gerenciador de token criado uma vez para o spec, com TTL de
+      120000 ms e relógio controlado
+
+  CT-TK-01 | P0 | Positivo | API real | I3 | R04
+  Scenario: Obter token com credenciais válidas
+    Given não há token em cache
+    When o cliente faz login com "eve.holt@reqres.in" e "cityslicka"
+    Then deve receber um token não vazio
+    And o token em cache deve estar válido
+
+  CT-TK-02 | P0 | Positivo | API real | I3 | R04
+  Scenario: Reutilizar o token em outro teste sem novo login
+    Given um token válido foi obtido em um teste anterior
+    When outro teste solicita o token
+    Then deve receber o mesmo token
+    And a quantidade de logins no spec deve continuar 1
+
+  CT-TK-03 | P1 | Positivo | API real | I3 | R03, R04
+  Scenario: Enviar o token em cache na requisição autenticada
+    Given um token válido em cache
+    When o cliente consulta o usuário 2 com o token
+    Then a requisição deve ter saído com "Authorization: Bearer <token>"
+    And não deve ter havido novo login
+    And a resposta atual do ReqRes (401, ver RI07) deve ser classificada
+      como "token rejeitado"
+  Observação: se o ReqRes voltar a aceitar o Bearer, este caso falha e
+    sinaliza a mudança da dependência.
+
+  CT-TK-04 | P2 | Positivo | API real | I3 | -
+  Scenario: Consultar o usuário 2 sem Bearer (teste de controle)
+    Given a chave x-api-key do ReqRes
+    When o cliente consulta o usuário 2 sem o header Authorization
+    Then a resposta deve ser 200
+    And os dados devem ser do usuário 2 ("janet.weaver@reqres.in")
+  Objetivo: isolar a causa do 401 do CT-TK-03 (o header, não o recurso).
+
+  CT-TK-05 | P1 | Negativo | API real | I3 | R06
+  Scenario: Recusar login sem senha
+    When o cliente faz login informando apenas o e-mail
+    Then a resposta deve ser 400 com {"error":"Missing password"}
+    And não deve haver token
+
+  CT-TK-06 | P1 | Negativo | API real | I3 | R06
+  Scenario: Recusar login com usuário inexistente
+    When o cliente faz login com "usuario.inexistente@reqres.in"
+    Then a resposta deve ser 400 com {"error":"user not found"}
+    And não deve haver token
+
+  (CT-TK-05 e CT-TK-06 são o mesmo comportamento com dados diferentes;
+   no código, uma tabela de dados gera os dois testes, como um Scenario
+   Outline.)
+
+  CT-TK-07 | P0 | Borda | Unitário | I4 | R03
+  Scenario Outline: Decidir a expiração do token pelo TTL
+    Given um token obtido no instante T
+    When a idade do token é <idade>
+    Then o token deve estar <situacao>
+    Examples:
+      | idade       | situacao  |
+      | 0 ms        | válido    |
+      | TTL - 1 ms  | válido    |
+      | TTL         | expirado  |
+      | sem token   | expirado  |
+
+  CT-TK-08 | P1 | Positivo | API real | I4 | R03, R04
+  Scenario: Reutilizar o token enquanto o TTL não venceu
+    Given um token válido em cache
+    When o relógio avança até 1 ms antes do TTL
+    And o token é solicitado
+    Then o token deve continuar válido
+    And não deve haver novo login
+
+  CT-TK-09 | P0 | Negativo | API real | I4 | R03, R06
+  Scenario: Detectar o token expirado com erro claro
+    Given um token válido em cache
+    When o relógio avança exatamente o TTL
+    Then o token deve constar como expirado
+    And exigir um token válido deve falhar com
+      "Token expirado: obtido há 120000 ms, TTL de 120000 ms."
+
+  CT-TK-10 | P0 | Positivo | API real | I4 | R03
+  Scenario: Renovar automaticamente o token expirado
+    Given um token em cache cujo TTL venceu
+    When o cliente faz a requisição autenticada ao usuário 2
+    Then deve ser feito exatamente um novo login
+    And o horário de obtenção deve ser o "agora" simulado
+    And a requisição deve ter saído com o token renovado
+
+  CT-TK-11 | P1 | Negativo | Unitário | I4 | R03
+  Scenario Outline: Classificar a resposta da requisição autenticada
+    Given uma resposta com status <status>
+    When a resposta é classificada
+    Then a classificação deve ser <classificacao>
+    Examples:
+      | status            | classificacao    |
+      | 200               | sucesso          |
+      | 401               | token_rejeitado  |
+      | 429 + Retry-After | rate_limit       |
+      | 400               | erro             |
+
+
+--------------------------------------------------------------------------------
+6. MASSA DE TESTES
+--------------------------------------------------------------------------------
+
+  - GitHub: usuário público "github". GITHUB_TOKEN opcional (cypress.env.json
+    ou CYPRESS_GITHUB_TOKEN).
+  - ReqRes: eve.holt@reqres.in / cityslicka (do enunciado), x-api-key
+    reqres-free-v1, e-mail inexistente usuario.inexistente@reqres.in.
+  - Respostas simuladas: montadas no próprio spec (status, headers, body),
+    com Reset fixo (epoch 1800000000) para cálculos determinísticos.
+  - Não há massa a limpar: todas as chamadas são de leitura ou login.
+
+
+--------------------------------------------------------------------------------
+7. REGRESSÃO
+--------------------------------------------------------------------------------
+
+  Smoke (npm run test:smoke): CT-RL-01, CT-RL-04, CT-TK-01, CT-TK-09.
+    Cobre o contrato de headers, a detecção de bloqueio, o login e a
+    expiração, com 1 chamada ao GitHub e 1 login no ReqRes.
+  Regressão crítica: todos os P0 (CT-RL-01, 04, 07; CT-TK-01, 02, 07, 09, 10).
+  Regressão completa: todos os casos, exceto CT-RL-11.
+  CT-RL-11: somente sob demanda, em execução isolada.
+
+
+--------------------------------------------------------------------------------
+8. MATRIZ DE RASTREABILIDADE
+--------------------------------------------------------------------------------
+
+Item  Regras                 Riscos           Casos
+----  ---------------------  ---------------  -----------------------------------
+I1    RN01, RN02, RI01       R02, R07         CT-RL-01, CT-RL-02, CT-RL-03,
+                                              CT-RL-10
+I2    RN03, RI02, RI03, RP04 R01, R05, R07    CT-RL-04, CT-RL-05, CT-RL-06,
+                                              CT-RL-07, CT-RL-08, CT-RL-09,
+                                              CT-RL-10, CT-RL-11
+I3    RN04, RN05, RN06,      R03, R04, R06    CT-TK-01, CT-TK-02, CT-TK-03,
+      RI04-RI07                               CT-TK-04, CT-TK-05, CT-TK-06
+I4    RN06, RP01, RP02, RP03 R03, R06         CT-TK-07, CT-TK-08, CT-TK-09,
+                                              CT-TK-10, CT-TK-11
+
+
+--------------------------------------------------------------------------------
+9. GAPS
+--------------------------------------------------------------------------------
+
+Gaps:
+  G01  O ReqRes não expira o token no servidor: a expiração é só do lado do
+       cliente (TTL). A detecção por 401 é coberta apenas com resposta
+       simulada (CT-TK-11) e com o 401 atual do Bearer (CT-TK-03).
+  G02  O ReqRes atual recusa Authorization: Bearer em /api/users/2 (RI07);
+       não há hoje um caminho real de "requisição autenticada com sucesso".
+  G03  O 403 real de rate limit só é validado no CT-RL-11, opcional.
+  G04  O ReqRes aceita qualquer senha para eve.holt@reqres.in; "senha
+       incorreta" não é testável nessa API.
+  G05  A chave pública reqres-free-v1 tem cota de 40 req/dia por IP. Com a
+       cota esgotada (429), os CT-TK de API real falham como INCONCLUSIVO,
+       sem validar a regra; o resultado só vale após o reset (00:00 UTC) ou
+       com uma chave própria.
+
+--------------------------------------------------------------------------------
+10. RESUMO DE COBERTURA
+--------------------------------------------------------------------------------
+
+  Itens do enunciado cobertos: I1, I2, I3, I4 (4 de 4).
+  Regras cobertas: RN01-RN06, RI01-RI07, RP01-RP04. RI08 (rate limit do
+    ReqRes) é tratado na mensagem de erro do login, sem caso dedicado.
+  Positivos: 10 | Negativos: 9 | Borda: 3.
+  Integrações: GitHub API e ReqRes (chamadas reais), com fallback para
+    cota esgotada.
+  Autenticação: token GitHub opcional (limite 5000) e token ReqRes
+    (login, reutilização, expiração, renovação, 401).

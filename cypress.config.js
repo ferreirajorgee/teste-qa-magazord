@@ -40,6 +40,10 @@ module.exports = defineConfig({
     // Tempo de vida simulado do token do ReqRes (2 minutos, conforme enunciado).
     TOKEN_TTL_MS: 120000,
 
+    // Teste destrutivo que esgota a cota anônima real da GitHub API (60 req/h por IP).
+    // Desligado por padrão; execute isolado com `npm run test:destrutivo`.
+    GITHUB_ESGOTAR_COTA: false,
+
     // @cypress/grep: ao filtrar por tag, só abre os specs que contêm a tag.
     grepFilterSpecs: true,
   },
