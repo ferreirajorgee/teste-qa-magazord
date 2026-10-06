@@ -1,0 +1,2 @@
+# Normaliza quebras de linha (evita diffs falsos entre Windows e Linux)
+* text=auto eol=lf

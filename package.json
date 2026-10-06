@@ -1,0 +1,34 @@
+{
+  "name": "teste-qa-magazord",
+  "version": "1.0.0",
+  "description": "Teste técnico de QA da Magazord: automação de API, E2E e upload de arquivos com Cypress",
+  "private": true,
+  "author": "Jorge Ferreira",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0 || >=26.0.0"
+  },
+  "scripts": {
+    "cy:open": "cypress open --e2e",
+    "test": "cypress run",
+    "test:parte1": "cypress run --spec \"parte1-api/**/*.spec.js\"",
+    "test:parte2": "cypress run --spec \"parte2-e2e/**/*.spec.js\"",
+    "test:parte3": "cypress run --spec \"parte3-arquivos/**/*.spec.js\"",
+    "test:smoke": "cypress run --expose grepTags=@smoke,grepOmitFiltered=true",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@cypress/grep": "7.0.0",
+    "@eslint/js": "10.0.1",
+    "@faker-js/faker": "10.6.0",
+    "cypress": "16.1.1",
+    "cypress-mochawesome-reporter": "5.0.0",
+    "eslint": "10.12.0",
+    "eslint-plugin-cypress": "7.0.2",
+    "globals": "17.13.0",
+    "prettier": "3.9.9"
+  }
+}

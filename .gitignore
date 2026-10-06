@@ -1,0 +1,23 @@
+# Dependências
+node_modules/
+
+# Credenciais locais (use cypress.env.example.json como modelo)
+cypress.env.json
+.env
+.env.*
+
+# Saídas geradas pelo Cypress (relatório, evidências e downloads)
+cypress/reports/
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+
+# Sistema operacional e logs
+.DS_Store
+Thumbs.db
+*.log
+
+# Editor: versiona só as configurações compartilhadas do VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

@@ -1,0 +1,17 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "editor.rulers": [100],
+  "search.exclude": {
+    "cypress/reports": true,
+    "package-lock.json": true
+  },
+  "[markdown]": {
+    "editor.wordWrap": "on"
+  },
+  "cSpell.language": "en,pt,pt-BR",
+  "cSpell.words": ["Magazord", "saucedemo", "reqres", "mochawesome", "ratelimit", "faker"]
+}

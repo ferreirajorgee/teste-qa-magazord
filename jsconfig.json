@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["cypress", "@cypress/grep"]
+  },
+  "include": ["cypress/**/*.js", "parte*/**/*.js"],
+  "exclude": ["node_modules", "cypress/reports"]
+}
