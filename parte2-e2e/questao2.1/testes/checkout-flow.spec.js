@@ -50,6 +50,7 @@ import {
 } from './utils/checkout-helper';
 import { COOKIE_SESSAO, PAGINAS, urlSauce } from './utils/rotas';
 import { calcularTotais, formatarCentavos } from './utils/valores';
+import { seedInformada } from '../../../cypress/support/seed';
 
 const PAGAMENTO = 'SauceCard #31337';
 const ENTREGA = 'Free Pony Express Delivery!';
@@ -57,23 +58,6 @@ const CONFIRMACAO_CABECALHO = 'Thank you for your order!';
 const CONFIRMACAO_TEXTO =
   'Your order has been dispatched, and will arrive just as fast as the pony can get there!';
 const USUARIO_BLOQUEADO = 'locked_out_user';
-
-/**
- * Seed de `--expose FAKER_SEED`, para reproduzir uma falha. Sem o parâmetro,
- * retorna `undefined` e cada comprador recebe uma seed nova.
- */
-function seedInformada() {
-  const valor = Cypress.expose('FAKER_SEED');
-  if (valor === undefined || valor === null || valor === '') {
-    return undefined;
-  }
-
-  const seed = Number(valor);
-  if (!Number.isSafeInteger(seed) || seed < 0) {
-    throw new Error(`FAKER_SEED deve ser um inteiro não negativo; recebido "${valor}".`);
-  }
-  return seed;
-}
 
 /** Registra a seed no Command Log e no relatório do mochawesome. */
 function registrarSeed(comprador, titulo = 'Seed do comprador (FAKER_SEED)') {

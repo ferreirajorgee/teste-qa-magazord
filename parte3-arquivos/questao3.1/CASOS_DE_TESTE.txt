@@ -1,0 +1,396 @@
+================================================================================
+QUESTÃO 3.1 - IMPORTAÇÃO DE CSV (TESTES COM ARQUIVOS)
+Casos de teste e estratégia
+================================================================================
+
+Autor: Jorge Ferreira
+Aplicação: https://the-internet.herokuapp.com/upload (File Uploader)
+Teoria:    parte3-arquivos/questao3.1/RESPOSTA_TEORICA.md
+
+Este documento especifica os cenários. A implementação automatizada está em
+parte3-arquivos/questao3.1/testes/csv-upload.spec.js, e os IDs abaixo são os
+mesmos usados nos títulos dos testes.
+
+
+--------------------------------------------------------------------------------
+1. ESCOPO
+--------------------------------------------------------------------------------
+
+Itens do enunciado (usados na rastreabilidade):
+
+  I1  Gerador de CSV dinâmico com 10 (pequeno), 100 (médio) e 1000 (grande)
+      linhas.
+  I2  Upload de arquivo válido.
+  I3  Upload de arquivo inválido: CSV vazio, CSV com formato incorreto e CSV
+      com dados malformados.
+  I4  Validação de upload bem-sucedido.
+  I5  Validação de formato, regras de negócio, duplicatas e relacionamentos
+      (contexto da questão).
+
+Dentro do escopo:
+  - Geração do CSV (conteúdo, contagem, unicidade, UTF-8, reprodutibilidade).
+  - Upload pelo input nativo (#file-upload) e envio (#file-submit).
+  - Resultado exibido: "File Uploaded!" e nome em #uploaded-files.
+  - Integridade do envio: corpo multipart do POST /upload igual ao arquivo.
+  - Arquivos inválidos: vazio, formato incorreto, malformado e corrompido,
+    com o comportamento esperado (validação de referência) e o observado.
+  - Envio do formulário sem arquivo.
+
+Fora do escopo:
+  - Processamento das linhas no servidor (contagem, gravação, rejeição): o
+    site não importa o conteúdo (G01). Estratégia em 3.1.a.
+  - Regras de negócio, duplicatas e relacionamentos no servidor (I5): não
+    existem no site (G01, G02). Validados só no arquivo, pelo validador de
+    referência, e tratados em 3.1.a e 3.1.b.
+  - Upload por arrastar e soltar (/upload tem uma área de drag and drop, que
+    usa outro componente), limite de tamanho, volume acima de 1000 linhas e
+    performance.
+
+
+--------------------------------------------------------------------------------
+2. REGRAS IDENTIFICADAS
+--------------------------------------------------------------------------------
+
+Do enunciado:
+  RN01  O CSV de teste tem o cabeçalho nome,email,idade,cidade (exemplo do
+        enunciado) e é gerado dinamicamente com 10, 100 e 1000 linhas.
+  RN02  O upload válido deve ser confirmado pela mensagem "File Uploaded!" e
+        pelo nome do arquivo em #uploaded-files.
+  RN03  Os cenários inválidos mínimos são: CSV vazio, formato incorreto e
+        dados malformados.
+
+Observadas no the-internet em 06/10/2026 (dependência externa, não do
+enunciado; conferidas pelo navegador e por requisição direta):
+  RI01  O formulário faz POST multipart/form-data para /upload, campo "file".
+        A resposta é uma página nova (mesma URL) com o título "File
+        Uploaded!" e o nome do arquivo em #uploaded-files; o input some.
+  RI02  O site não lê o conteúdo: aceita CSV vazio (0 bytes), com separador
+        errado, malformado e binário, sempre com HTTP 200 e "File Uploaded!".
+  RI03  Enviar o formulário sem arquivo responde HTTP 500 com "Internal Server
+        Error" (defeito D01).
+  RI04  Nome de arquivo com acento é exibido com a codificação errada.
+  RI05  O Heroku responde 503 de forma intermitente.
+  RI06  O primeiro acesso da execução às vezes leva cerca de 30 s para
+        carregar (latência do Heroku, intermitente); os seguintes levam cerca
+        de 2 s. Fica dentro do pageLoadTimeout padrão (60 s).
+
+Regras de referência de um importador (hipóteses de teste: o enunciado cita
+"formato, regras de negócio, duplicatas e relacionamentos" sem detalhar).
+Implementadas em testes/utils/csv-validador.js, que serve de oráculo:
+  RH01  Arquivo vazio é recusado (ARQUIVO_VAZIO).
+  RH02  O conteúdo deve ser texto UTF-8 válido, sem byte nulo
+        (CODIFICACAO_INVALIDA, CONTEUDO_BINARIO). BOM UTF-8 é aceito.
+  RH03  O cabeçalho deve ser exatamente nome,email,idade,cidade; caso
+        contrário o arquivo inteiro é recusado (CABECALHO_INVALIDO).
+  RH04  Cada linha tem 4 colunas, segundo a RFC 4180 (campo entre aspas pode
+        conter vírgula e aspas duplicadas). Aspas não fechadas são erro
+        (QUANTIDADE_DE_COLUNAS, ASPAS_NAO_FECHADAS, LINHA_EM_BRANCO).
+  RH05  Todos os campos são obrigatórios (CAMPO_OBRIGATORIO).
+  RH06  E-mail no formato usuario@dominio.tld (EMAIL_INVALIDO).
+  RH07  Idade é inteiro não negativo (IDADE_INVALIDA).
+  RH08  E-mail é único no arquivo, sem diferenciar maiúsculas; a segunda
+        ocorrência é rejeitada com a linha da primeira (EMAIL_DUPLICADO).
+  Os erros são reportados com o número da linha do arquivo (cabeçalho = 1) e
+  o relatório fecha a conta: aceitas + rejeitadas = lidas.
+
+Regras de projeto (decisão de estratégia):
+  RP01  O CSV é gerado com @faker-js/faker e seed registrada no log: a mesma
+        seed regenera o mesmo arquivo. E-mails únicos por construção (número
+        da linha no e-mail) e cidades com acento em rotação fixa (a primeira
+        é "São Paulo"). Nomes de arquivo só com ASCII (RI04).
+  RP02  Antes de qualquer upload, o arquivo é conferido pelo validador de
+        referência: os válidos devem passar inteiros; os inválidos devem ter
+        exatamente os erros esperados.
+  RP03  A integridade do envio é verificada no corpo multipart capturado por
+        cy.intercept no POST /upload (campo, nome, tipo e conteúdo). Isso prova
+        que o arquivo saiu íntegro do navegador; o servidor só confirma com
+        200 e o nome exibido, sem devolver o conteúdo.
+  RP04  O comportamento observado do site em arquivos inválidos é registrado
+        como observado, não como regra: o título do teste diz que o site
+        aceita sem validar.
+  RP05  503 vira falha "INCONCLUSIVO" (ambiente), não defeito (RI05), ao
+        abrir a página (GET /upload) e no envio (POST /upload). Qualquer
+        outro status de erro ao abrir a página falha normalmente.
+
+
+--------------------------------------------------------------------------------
+3. ESTRATÉGIA (ORIENTADA A RISCO)
+--------------------------------------------------------------------------------
+
+Riscos considerados:
+
+  R01  CRÍTICO  Linhas perdidas ou alteradas entre o arquivo e o servidor
+                (encoding, quebra de linha, truncamento), com "sucesso" na
+                tela.
+  R02  CRÍTICO  Arquivo inválido aceito e processado como válido, gravando
+                dados errados.
+  R03  ALTO     Massa de teste errada (arquivo que não é o que o cenário
+                diz), gerando falso positivo ou falso negativo.
+  R04  ALTO     Duplicatas na massa gerada mascarando a regra de unicidade.
+  R05  ALTO     Erro de servidor (500) em entrada inválida, em vez de
+                mensagem de validação.
+  R06  MÉDIO    Acentos corrompidos (UTF-8) no conteúdo ou no nome.
+  R07  MÉDIO    Falha não reproduzível por dados aleatórios sem seed.
+  R08  BAIXO    Indisponibilidade do ambiente confundida com defeito.
+
+Decisões:
+
+  1. Oráculo explícito: como o site não valida conteúdo, o validador de
+     referência (RH01-RH08) decide se o arquivo é válido e quais erros tem.
+     Ele é a especificação executável do que um importador real deveria
+     reportar, e é usado antes do upload em todos os cenários (RP02).
+  2. Integridade pelo corpo da requisição: o site devolve só o nome, então
+     a prova de que as 1000 linhas saíram íntegras do navegador é o corpo
+     multipart do POST /upload, capturado pelo proxy do Cypress no
+     cy.intercept e comparado com o gerado (RP03). Do servidor, só se
+     observa o 200 e o nome exibido.
+     Para o arquivo binário, cujo corpo é decodificado com perda, a prova é
+     o tamanho em bytes do arquivo selecionado no input.
+  3. CSV gerado em memória (cy.selectFile com { contents }), sem escrever em
+     disco: nenhuma alteração no cypress.config.js (sem cy.task) e nenhum
+     resíduo entre execuções. Fixtures inválidas versionadas, enviadas pelo
+     caminho, como faria o usuário.
+  4. Pirâmide: as regras de linha são cobertas aqui no nível do validador
+     (sem rede, CT-UP-01, CT-UP-02 e a primeira parte do CT-UP-05). Em um
+     produto real, ficariam em teste unitário do parser e teste de API do
+     endpoint; o E2E fica com o fluxo e a exibição.
+  5. Seletores estáveis do site: #file-upload, #file-submit, #uploaded-files
+     e #content h3. Sincronização pelo alias do POST /upload, sem cy.wait de
+     tempo fixo (bloqueado pelo lint).
+  6. Nenhuma resposta do site é simulada: o cy.intercept do POST /upload só
+     observa a requisição real. A lentidão ocasional do primeiro acesso (RI06)
+     é absorvida pelo pageLoadTimeout, sem espera fixa.
+
+Prioridades:
+  P0  Falha impede o fluxo principal ou permite perda/corrupção de dados.
+  P1  Comportamento importante ou risco significativo.
+  P2  Borda e complementares.
+
+Tags: @smoke (P0 rápido), @unitario (CT-UP-01 e CT-UP-02, sem rede), @e2e
+      (CT-UP-03 a CT-UP-06), @csv, @gerador, @upload, @negativo.
+
+
+--------------------------------------------------------------------------------
+4. RESUMO DOS CASOS
+--------------------------------------------------------------------------------
+
+ID        Título                                           Tipo      Prior. Camada     Item
+--------  -----------------------------------------------  --------  ------ ---------  -----
+CT-UP-01  Gerar CSV de 10/100/1000 linhas válido           Positivo  P0     Unitário*  I1
+CT-UP-02  Mesma seed, mesmo CSV; seeds diferentes, outro   Positivo  P1     Unitário*  I1
+CT-UP-03  Enviar CSV gerado (10/100/1000) por inteiro      Positivo  P0     E2E UI     I2, I4
+CT-UP-04  Enviar a fixture válida (acentos e aspas)        Positivo  P1     E2E UI     I2, I4
+CT-UP-05  Arquivo inválido: esperado vs observado          Negativo  P0     E2E UI     I3, I5
+CT-UP-06  Enviar o formulário sem arquivo                  Negativo  P2     E2E UI     I3
+
+(*) Funções puras executadas pelo Cypress, sem navegador nem rede.
+
+Totais: 6 casos, 13 testes executados (CT-UP-01 e CT-UP-03 com 3 tamanhos,
+        CT-UP-05 com 4 arquivos)
+        4 positivos, 2 negativos
+        P0: 3 | P1: 2 | P2: 1
+        Automatizáveis: 6 | Exploratório complementar: ver seção 9
+
+
+--------------------------------------------------------------------------------
+5. CASOS DETALHADOS
+--------------------------------------------------------------------------------
+
+Pré-condições gerais:
+  PC01  Acesso à internet para https://the-internet.herokuapp.com.
+  PC02  Página /upload aberta com o título "File Uploader" (beforeEach dos
+        blocos de upload).
+  PC03  CSV gerado no início do teste, com a seed registrada (RP01), ou
+        fixture lida de testes/fixtures.
+
+
+Feature: Gerador de CSV
+
+  CT-UP-01 | P0 | Positivo | Unitário | I1 | R03, R04, R06
+  Scenario Outline: Gerar CSV <tamanho> válido
+    Given uma seed nova (ou a informada em FAKER_SEED)
+    When o gerador cria o CSV com <linhas> registros
+    Then o arquivo deve ter <linhas> + 1 linhas, a primeira igual a
+      "nome,email,idade,cidade", e terminar com quebra de linha
+    And a validação de referência deve ler <linhas> linhas e aceitar todas,
+      sem erros e sem linhas rejeitadas
+    And os registros lidos devem ser iguais aos gerados
+    And os <linhas> e-mails devem ser distintos
+    And o conteúdo deve conter "São Paulo", com mais bytes UTF-8 do que
+      caracteres
+    Examples:
+      | tamanho | linhas |
+      | pequeno | 10     |
+      | medio   | 100    |
+      | grande  | 1000   |
+
+  CT-UP-02 | P1 | Positivo | Unitário | I1 | R07
+  Scenario: Reproduzir o CSV pela seed
+    Given um CSV de 10 linhas gerado com uma seed
+    When o CSV é gerado de novo com a mesma seed
+    Then o resultado deve ser idêntico (nome do arquivo, registros, conteúdo)
+    When o CSV é gerado com outra seed
+    Then o conteúdo deve ser diferente e continuar válido
+
+
+Feature: Upload de arquivo válido
+
+  CT-UP-03 | P0 | Positivo | E2E UI | I2, I4 | R01 | @smoke (10 linhas)
+  Scenario Outline: Enviar o CSV <tamanho> gerado por inteiro
+    Given um CSV de <linhas> linhas gerado e aceito por inteiro pela
+      validação de referência
+    When o usuário seleciona o arquivo
+    Then o input deve conter 1 arquivo com o nome e o tamanho em bytes do CSV
+    When envia o formulário
+    Then o POST /upload deve responder 200
+    And o corpo multipart capturado deve conter o campo "file", o nome do
+      arquivo, o tipo "text/csv" e o conteúdo idêntico ao gerado, com
+      <linhas> + 1 linhas (o arquivo saiu íntegro do navegador)
+    And a página deve exibir "File Uploaded!"
+    And #uploaded-files deve exibir o nome do arquivo
+    Examples:
+      | tamanho | linhas |
+      | pequeno | 10     |
+      | medio   | 100    |
+      | grande  | 1000   |
+
+  CT-UP-04 | P1 | Positivo | E2E UI | I2, I4 | R01, R06
+  Scenario: Enviar a fixture válida do enunciado
+    Given a fixture "valido.csv" com 5 registros, acentos, um nome com
+      vírgula ("Souza, Luís") e um com aspas ('Ana "Nina" Lima')
+    And a validação de referência aceita as 5 linhas com esses nomes
+    When o usuário seleciona e envia o arquivo
+    Then o conteúdo enviado deve ser idêntico ao da fixture
+    And a página deve exibir "File Uploaded!" e "valido.csv"
+
+
+Feature: Upload de arquivo inválido
+
+  CT-UP-05 | P0 | Negativo | E2E UI | I3, I5 | R02, R03 | @negativo
+  Scenario Outline: Arquivo inválido recusado pela referência e aceito pelo site
+    Given a fixture <arquivo>
+    Then a validação de referência deve recusá-la com exatamente <erros>
+    And deve ler <lidas> linhas de dados, com aceitas + rejeitadas = lidas
+    When o usuário seleciona e envia o arquivo
+    Then (observado) o arquivo sai íntegro do navegador e o POST /upload
+      responde 200
+    And (observado) a página exibe "File Uploaded!" e o nome do arquivo
+    Examples:
+      | arquivo               | lidas | erros                                  |
+      | vazio.csv             | 0     | ARQUIVO_VAZIO                          |
+      | formato-incorreto.csv | 2     | CABECALHO_INVALIDO@1                   |
+      | malformado.csv        | 9     | QUANTIDADE_DE_COLUNAS@3, @4,           |
+      |                       |       | EMAIL_INVALIDO@5, IDADE_INVALIDA@6,    |
+      |                       |       | CAMPO_OBRIGATORIO@7, LINHA_EM_BRANCO@8,|
+      |                       |       | EMAIL_DUPLICADO@9, ASPAS_NAO_FECHADAS@10|
+      | corrompido.csv        | 0     | CODIFICACAO_INVALIDA                   |
+  Esperado de um importador real (não implementado pelo site, G01): recusar
+    o arquivo (vazio, formato incorreto, corrompido) ou as linhas inválidas
+    (malformado: 1 aceita, 8 rejeitadas), com status 400/422, mensagem por
+    linha e nenhum registro gravado indevidamente.
+  Observação: para corrompido.csv, o corpo da requisição é decodificado com
+    perda (bytes inválidos em UTF-8), então só o nome é comparado no corpo; a
+    integridade vem do tamanho em bytes do arquivo selecionado.
+
+  CT-UP-06 | P2 | Negativo | E2E UI | I3 | R05 | @negativo
+  Scenario: Enviar o formulário sem arquivo
+    Given a página /upload sem arquivo selecionado
+    When o usuário envia o formulário
+    Then (observado) o POST /upload responde 500, sem nome nem conteúdo de
+      arquivo no corpo
+    And (observado) a página exibe "Internal Server Error"
+  Esperado de um sistema real: mensagem de validação ("selecione um
+    arquivo"), sem erro no servidor. Registrado como defeito D01; se o site
+    for corrigido, o teste falha e sinaliza a mudança.
+
+
+--------------------------------------------------------------------------------
+6. MASSA DE TESTES
+--------------------------------------------------------------------------------
+
+  - CSV gerado (utils/csv-generator.js): nome (faker pt_BR, com acentos),
+    e-mail "<nome.sobrenome>.<nº da linha>@example.com" (domínio reservado,
+    único por construção), idade de 18 a 90 e cidade em rotação fixa de 10
+    capitais com acento. Nome do arquivo
+    "usuarios-<linhas>-linhas-seed-<seed>.csv". Gerado em memória.
+  - Fixtures (testes/fixtures):
+      valido.csv             5 registros do exemplo do enunciado, com acentos,
+                             vírgula e aspas dentro de campos.
+      vazio.csv              0 bytes.
+      formato-incorreto.csv  separador ";" (cabeçalho com 1 coluna).
+      malformado.csv         1 linha válida e 8 defeitos, um por linha (3 a
+                             10), descritos no CT-UP-05.
+      corrompido.csv         cabeçalho e 1 linha válidos seguidos de bytes
+                             binários (assinatura ZIP, 0x00, 0xFF, 0xFE).
+  - Reprodução: npx cypress run --spec "parte3-arquivos/**/*.spec.js"
+    --expose FAKER_SEED=<seed>.
+  - Limpeza: nada é gravado em disco nem persistido no servidor pelo teste.
+
+
+--------------------------------------------------------------------------------
+7. REGRESSÃO
+--------------------------------------------------------------------------------
+
+  Smoke (@smoke): CT-UP-03 com 10 linhas.
+  Regressão crítica: todos os P0 (CT-UP-01, CT-UP-03, CT-UP-05).
+  Regressão completa: todos os casos.
+
+
+--------------------------------------------------------------------------------
+8. MATRIZ DE RASTREABILIDADE
+--------------------------------------------------------------------------------
+
+Item  Regras                  Riscos           Casos
+----  ----------------------  ---------------  -----------------------------------
+I1    RN01, RP01              R03, R04, R06,   CT-UP-01, CT-UP-02
+                              R07
+I2    RN01, RI01, RP02, RP03  R01, R06         CT-UP-03, CT-UP-04
+I3    RN03, RI02, RI03, RH01- R02, R03, R05    CT-UP-05, CT-UP-06
+      RH08, RP04
+I4    RN02, RI01              R01              CT-UP-03, CT-UP-04, CT-UP-05
+I5    RH01-RH08               R02, R04         CT-UP-05 (só no arquivo); G01,
+                                               G02; RESPOSTA_TEORICA 3.1.a/b
+
+
+--------------------------------------------------------------------------------
+9. GAPS
+--------------------------------------------------------------------------------
+
+Gaps:
+  G01  O site não processa o conteúdo: não há contagem de linhas
+       importadas, rejeição, mensagem de erro de validação nem resumo da
+       importação. A reconciliação (lidas = aceitas + rejeitadas) só pode ser
+       verificada no arquivo; a estratégia para o servidor está em 3.1.a.
+  G02  Não há entidades relacionadas nem regra de duplicata no servidor.
+       Relacionamentos não têm caso automatizado; duplicatas são validadas
+       só no arquivo (RH08). Estratégia em 3.1.a e 3.1.b.
+  G03  As regras RH01-RH08 são hipóteses (o enunciado não detalha o
+       formato aceito). Em um projeto real, devem ser confirmadas com PO/Dev:
+       separador aceito, encoding, campos obrigatórios, faixa de idade,
+       chave de duplicata, rejeição parcial ou total.
+  G04  Comportamentos observados sem regra definida (exploratório, sem
+       asserção automatizada): nome de arquivo com acento exibido com a
+       codificação errada (RI04); limite de tamanho não documentado; área de
+       drag and drop.
+  G05  O the-internet é uma aplicação de demonstração de terceiros, sujeita
+       a 503 intermitente (RI05). Textos e seletores podem mudar sem aviso,
+       e os cenários falham sinalizando a mudança.
+
+Defeitos:
+  D01  Enviar o formulário sem arquivo responde HTTP 500 "Internal Server
+       Error", em vez de uma mensagem de validação (CT-UP-06).
+
+--------------------------------------------------------------------------------
+10. RESUMO DE COBERTURA
+--------------------------------------------------------------------------------
+
+  Itens do enunciado cobertos: I1, I2, I3, I4 (4 de 4 do teste prático).
+    I5 (validações do importador) não existe no site: coberto no arquivo
+    pelo validador de referência e na teoria; registrado como G01 e G02.
+  Regras cobertas: RN01-RN03, RI01-RI03, RI05-RI06, RH01-RH08, RP01-RP05.
+    RI04 só exploratório (G04).
+  Positivos: 4 casos (8 testes) | Negativos: 2 casos (5 testes).
+  Integração: POST /upload real, com o corpo multipart enviado pelo
+    navegador verificado e a resposta 200 do servidor.
+  Não coberto: processamento no servidor, relacionamentos, limite de
+    tamanho, drag and drop, volume acima de 1000 linhas.
