@@ -119,10 +119,10 @@ O risco central é o da Parte 3: **perda silenciosa**. A tela diz "salvo" e o da
 | Encerrar o app com fila pendente          | Fila persistida após reabrir e enviada                                                           |
 | Queda no meio da sync ou resposta perdida | Nada já confirmado é reenviado; reenvio com a mesma chave de idempotência gera uma única criação |
 | Conflito (alterado no servidor e no app)  | Aplica a regra definida pelo PO e avisa o usuário quando necessário                              |
-| 500, 429 e 401 durante a sync             | Backoff sem perder a fila; respeita `Retry-After` (Parte 1.1); renova sessão uma vez             |
+| 500, 429 e 401 durante a sync             | Backoff sem perder a fila; respeita `Retry-After`; renova sessão uma vez                         |
 | Alteração e exclusão feitas no servidor   | Refletidas no app após a sync                                                                    |
 
-**4. A lógica vem antes do dispositivo.** Fila, ordenação, idempotência, backoff e conflitos são testados em unitário com rede falsa e relógio controlado (`criarRelogioControlado`, da Parte 1.1). No E2E ficam os cenários que provam storage real, rede do sistema e interface, sempre esperando por estado (pendências zeradas, journal com N requisições), nunca por tempo fixo.
+**4. A lógica vem antes do dispositivo.** Fila, ordenação, idempotência, backoff e conflitos são testados em unitário com rede falsa e relógio injetado como parâmetro (como o "agora" das funções de token da Parte 1.1). No E2E ficam os cenários que provam storage real, rede do sistema e interface, sempre esperando por estado (pendências zeradas, journal com N requisições), nunca por tempo fixo.
 
 ---
 

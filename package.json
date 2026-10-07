@@ -14,7 +14,7 @@
     "test:parte1": "cypress run --spec \"parte1-api/**/*.spec.js\"",
     "test:parte2": "cypress run --spec \"parte2-e2e/**/*.spec.js\"",
     "test:parte3": "cypress run --spec \"parte3-arquivos/**/*.spec.js\"",
-    "test:destrutivo": "cypress run --spec \"parte1-api/questao1.1/testes/rate-limit-destrutivo.spec.js\" --expose GITHUB_ESGOTAR_COTA=true",
+    "test:destrutivo": "cypress run --spec \"parte1-api/questao1.1/testes/api.spec.js\" --expose GITHUB_ESGOTAR_COTA=true",
     "test:smoke": "cypress run --expose grepTags=@smoke,grepOmitFiltered=true",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

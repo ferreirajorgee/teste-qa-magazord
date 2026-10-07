@@ -23,23 +23,23 @@ npm install
 
 ## Comandos
 
-| Comando                   | Descrição                                            |
-| ------------------------- | ---------------------------------------------------- |
-| `npm test`                | Executa todos os testes                              |
-| `npm run test:parte1`     | Executa a Parte 1 (API: rate limit e token)          |
-| `npm run test:parte2`     | Executa a Parte 2 (E2E: checkout no SauceDemo)       |
-| `npm run test:parte3`     | Executa a Parte 3 (arquivos: importação de CSV)      |
-| `npm run cy:open`         | Abre o Cypress no modo interativo                    |
-| `npm run test:smoke`      | Executa apenas os testes marcados com `@smoke`       |
-| `npm run test:destrutivo` | Executa só o CT-RL-11 (esgota a cota real do GitHub) |
-| `npm run lint`            | Analisa o código com ESLint                          |
-| `npm run format:check`    | Verifica a formatação com Prettier                   |
+| Comando                   | Descrição                                             |
+| ------------------------- | ----------------------------------------------------- |
+| `npm test`                | Executa todos os testes                               |
+| `npm run test:parte1`     | Executa a Parte 1 (API: rate limit e token)           |
+| `npm run test:parte2`     | Executa a Parte 2 (E2E: checkout no SauceDemo)        |
+| `npm run test:parte3`     | Executa a Parte 3 (arquivos: importação de CSV)       |
+| `npm run cy:open`         | Abre o Cypress no modo interativo                     |
+| `npm run test:smoke`      | Executa apenas os testes marcados com `@smoke`        |
+| `npm run test:destrutivo` | Executa a Questão 1.1 esgotando a cota real do GitHub |
+| `npm run lint`            | Analisa o código com ESLint                           |
+| `npm run format:check`    | Verifica a formatação com Prettier                    |
 
 O relatório HTML é gerado em `cypress/reports/index.html` ao final de cada execução.
 
-### Teste destrutivo (CT-RL-11)
+### Rate limit real do GitHub (opcional)
 
-O `CT-RL-11` esgota de verdade a cota anônima da GitHub API (60 req/h por IP), bloqueando o IP por até 1 hora. Por isso ele fica em um spec próprio e aparece como **pendente** no `npm test`, o que é esperado. Para executá-lo, rode `npm run test:destrutivo` isoladamente. Em CI, use um job agendado ou manual, separado da regressão. Na hora seguinte, os testes reais do GitHub continuam passando, mas sem validar o caminho de sucesso (200).
+Por padrão, o teste 2 da Questão 1.1 (detecção do 403) valida a detecção sem esgotar a cota. Com `npm run test:destrutivo` (flag `GITHUB_ESGOTAR_COTA=true`), ele faz requisições reais até a GitHub API bloquear, o que consome a cota anônima do IP (60 req/h) por até 1 hora. Em CI, use um job agendado ou manual, separado da regressão.
 
 ## Configuração
 
@@ -73,9 +73,9 @@ npx cypress run --spec "parte3-arquivos/**/*.spec.js" --expose FAKER_SEED=<seed>
 
 ### Cota do ReqRes
 
-A chave pública `reqres-free-v1` é tratada pelo ReqRes como acesso anônimo de demonstração: **40 requisições por dia por IP**, com reset à meia-noite UTC. Cada execução do `api.spec.js` usa cerca de 7 chamadas, então cabem poucas execuções por dia.
+A chave pública `reqres-free-v1` é tratada pelo ReqRes como acesso anônimo de demonstração: **40 requisições por dia por IP**, com reset à meia-noite UTC. Cada execução do `api.spec.js` usa 4 chamadas, então cabem poucas execuções por dia.
 
-Quando a cota acaba, os cenários do ReqRes falham com a mensagem `INCONCLUSIVO: cota do ReqRes esgotada (...)`, indicando o horário do reset. Isso não é defeito da aplicação nem do teste. Após o primeiro 429, as chamadas seguintes ao ReqRes não são enviadas, para não gastar mais cota.
+Quando a cota acaba, os testes do ReqRes falham com `Falha no login do ReqRes: HTTP 429`. Isso não é defeito da aplicação nem do teste.
 
 Para mais execuções, use a chave de uma conta própria do ReqRes, fora do Git: `REQRES_API_KEY` no `cypress.env.json` ou `CYPRESS_REQRES_API_KEY` em CI. Em CI, rode os cenários do ReqRes uma única vez por pipeline.
 
@@ -90,10 +90,8 @@ Para mais execuções, use a chave de uma conta própria do ReqRes, fora do Git:
 ├── parte1-api/
 │   └── questao1.1/             # rate limiting (GitHub API) e token (ReqRes)
 │       ├── RESPOSTA_TEORICA.md # respostas teóricas 1.1.a, 1.1.b e 1.1.c
-│       ├── CASOS_DE_TESTE.txt  # estratégia, casos, prioridades e rastreabilidade
 │       └── testes/
-│           ├── api.spec.js     # testes automatizados (CT-RL-* e CT-TK-*)
-│           ├── rate-limit-destrutivo.spec.js # CT-RL-11, sob demanda
+│           ├── api.spec.js     # os 4 testes do enunciado
 │           └── utils/
 │               └── api-helper.js # helper de rate limit e de token
 ├── parte2-e2e/
