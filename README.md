@@ -1,5 +1,7 @@
 # Teste QA Sênior - Jorge Ferreira
 
+[![Testes](https://github.com/ferreirajorgee/teste-qa-magazord/actions/workflows/testes.yml/badge.svg)](https://github.com/ferreirajorgee/teste-qa-magazord/actions/workflows/testes.yml)
+
 Automação e respostas do teste técnico para Coordenador de Qualidade de Software da Magazord.
 
 ## Tecnologias Utilizadas
@@ -50,7 +52,7 @@ O relatório HTML é gerado em `cypress/reports/index.html` ao final de cada exe
 
 ### Rate limit real do GitHub (opcional)
 
-Por padrão, o teste 2 da Questão 1.1 (detecção do 403) valida a detecção sem esgotar a cota. Com `npm run test:destrutivo` (flag `GITHUB_ESGOTAR_COTA=true`), ele faz requisições reais até a GitHub API bloquear, o que consome a cota anônima do IP (60 req/h) por até 1 hora. Em CI, esse modo deve rodar em um job agendado ou manual, separado da regressão.
+Por padrão, o teste 2 da Questão 1.1 (detecção do 403) valida a detecção sem esgotar a cota. Com `npm run test:destrutivo` (flag `GITHUB_ESGOTAR_COTA=true`), ele faz requisições reais até a GitHub API bloquear, o que consome a cota anônima do IP (60 req/h) por até 1 hora. No CI, esse modo roda apenas no disparo manual, separado da regressão (ver [Integração contínua](#integração-contínua)).
 
 ### Reproduzir uma falha com a mesma massa de dados
 
@@ -73,9 +75,26 @@ Para usar outros valores, sobrescreva os padrões com `cypress.env.json` (fora d
 cp cypress.env.example.json cypress.env.json   # preencha GITHUB_TOKEN
 ```
 
+## Integração contínua
+
+O workflow `.github/workflows/testes.yml` (GitHub Actions) executa o projeto em uma máquina Ubuntu limpa, com o Node do `.nvmrc`:
+
+- **Quando roda**: a cada push e pull request na `main`, e manualmente em _Actions > Testes > Run workflow_.
+- **Lint e formatação**: `npm run lint` e `npm run format:check`.
+- **Testes Cypress**: `npm ci` e `npm test`, executados só se o lint passar, para não gastar a cota do ReqRes à toa.
+- **Relatório**: o HTML do Mochawesome fica disponível para download por 14 dias no artefato `relatorio-cypress` de cada execução, inclusive quando há falha.
+- **Modo destrutivo**: só no disparo manual, marcando a opção `destrutivo`, que executa `npm run test:destrutivo`.
+
+O workflow não usa token do GitHub. O token automático do Actions tem limite de 1000 req/h, fora dos valores que a Questão 1.1 valida (60 ou 5000), e o modo destrutivo depende da cota anônima. Se o IP do runner, compartilhado com outros usuários, já estiver sem cota, a API responde 403, e os testes 1 e 2 aceitam essa resposta.
+
+Não há execução agendada: cada execução consome cotas de serviços de terceiros. Pelo mesmo motivo, uma falha no CI pode ser indisponibilidade de um dos sites públicos (ver [Dificuldades encontradas](#dificuldades-encontradas)); o relatório mostra qual teste falhou e por quê.
+
 ## Estrutura do Projeto
 
 ```text
+├── .github/
+│   └── workflows/
+│       └── testes.yml          # CI: lint, formatação e testes Cypress (GitHub Actions)
 ├── cypress/
 │   └── support/
 │       ├── e2e.js              # carregado antes de cada spec (plugins e commands)

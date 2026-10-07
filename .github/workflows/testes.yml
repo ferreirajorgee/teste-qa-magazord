@@ -1,0 +1,82 @@
+# Pipeline de testes: valida o projeto em uma máquina Linux limpa a cada push e PR.
+#
+# - qualidade: lint e formatação (rápido, sem baixar o binário do Cypress).
+# - testes: npm ci + suíte Cypress; só roda se a qualidade passar, para não
+#   gastar a cota diária do ReqRes (40 req/dia por IP) com código que já falhou.
+#
+# Sem execução agendada: os testes rodam contra sites públicos e cada execução
+# consome cotas de terceiros. O modo destrutivo da Questão 1.1 roda só no
+# disparo manual (Actions > Testes > Run workflow > destrutivo).
+
+name: Testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      destrutivo:
+        description: 'Esgotar a cota real da GitHub API na Questão 1.1 (npm run test:destrutivo)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Um novo push na mesma branch cancela a execução anterior.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualidade:
+    name: Lint e formatação
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Instalar dependências (sem o binário do Cypress)
+        run: npm ci
+        env:
+          CYPRESS_INSTALL_BINARY: 0
+
+      - run: npm run lint
+      - run: npm run format:check
+
+  testes:
+    name: Testes Cypress
+    needs: qualidade
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # Sem GITHUB_TOKEN de propósito: o token automático do Actions tem limite de
+      # 1000 req/h, fora dos valores que a Questão 1.1 valida (60 ou 5000), e o
+      # modo destrutivo precisa da cota anônima. Sem token, um IP de runner com a
+      # cota já esgotada responde 403, que os testes 1 e 2 aceitam.
+      - name: Instalar dependências e executar os testes
+        uses: cypress-io/github-action@v7.4.6
+        with:
+          command: ${{ inputs.destrutivo && 'npm run test:destrutivo' || 'npm test' }}
+
+      - name: Publicar relatório HTML
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: relatorio-cypress
+          path: cypress/reports/
+          if-no-files-found: ignore
+          retention-days: 14
