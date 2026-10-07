@@ -3,8 +3,8 @@
  *
  * O site do teste prático aceita qualquer arquivo e não lê o conteúdo. Este
  * módulo faz o papel do oráculo: implementa as validações que um importador
- * real deveria aplicar (RH01 a RH08 do CASOS_DE_TESTE, regras hipotéticas,
- * pois o enunciado não as detalha) e é usado para:
+ * real deveria aplicar (regras RH01 a RH08 do CASOS_DE_TESTE.txt, adotadas
+ * como premissa porque o enunciado não as detalha) e é usado para:
  * - conferir o CSV gerado antes do upload (contagem de linhas, colunas,
  *   e-mails únicos, UTF-8);
  * - provar que cada fixture inválida contém exatamente o defeito que diz ter.

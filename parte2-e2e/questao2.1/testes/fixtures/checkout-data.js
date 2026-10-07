@@ -1,12 +1,12 @@
 /**
- * Gerador de dados dinâmicos da Questão 2.1 (RN02 e RP01 do CASOS_DE_TESTE).
+ * Gerador de dados dinâmicos do comprador (Questão 2.1).
  *
  * Cada chamada cria uma instância própria do faker com uma seed conhecida.
  * Assim os dados mudam a cada execução, mas qualquer falha pode ser
  * reproduzida: basta gerar de novo com a seed registrada no log do teste.
  *
  * As funções são puras (sem `cy`), para que a reprodutibilidade possa ser
- * verificada no próprio teste (CT-CK-05).
+ * verificada no próprio teste.
  */
 import { Faker, base, en, pt_BR } from '@faker-js/faker';
 
@@ -15,7 +15,7 @@ const LOCALES = [pt_BR, en, base];
 
 const SEED_MAXIMA = 2 ** 31 - 1;
 
-/** Campos do formulário "Checkout: Your Information", na ordem de validação (RI05). */
+/** Campos do formulário "Checkout: Your Information", na ordem em que a tela os valida. */
 export const CAMPOS_COMPRADOR = ['firstName', 'lastName', 'postalCode'];
 
 /** Seed aleatória para uma nova massa de dados. */
@@ -44,7 +44,7 @@ export function gerarComprador(seed = gerarSeed()) {
   };
 }
 
-/** Cópia do comprador com os campos informados em branco (CT-CK-06). */
+/** Cópia do comprador com os campos informados em branco. */
 export function compradorSemCampos(comprador, camposVazios) {
   const copia = { ...comprador };
   camposVazios.forEach((campo) => {
@@ -53,7 +53,7 @@ export function compradorSemCampos(comprador, camposVazios) {
   return copia;
 }
 
-/** Senha gerada para o login inválido (CT-CK-12), nunca igual à senha válida. */
+/** Senha gerada para o teste de login inválido, nunca igual à senha válida. */
 export function gerarSenhaInvalida(senhaValida, seed = gerarSeed()) {
   const faker = criarFaker(seed);
   let senha = faker.internet.password({ length: 12 });

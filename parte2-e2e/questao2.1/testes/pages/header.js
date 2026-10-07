@@ -6,7 +6,7 @@
  * sincronização (qual página está aberta, quantos itens o badge mostra). As
  * regras de negócio ficam no spec.
  */
-class Cabecalho {
+class Header {
   elements = {
     titulo: () => cy.get('[data-test="title"]'),
     linkCarrinho: () => cy.get('[data-test="shopping-cart-link"]'),
@@ -23,7 +23,7 @@ class Cabecalho {
     this.elements.titulo().should('have.text', titulo);
   }
 
-  /** Badge com a quantidade; com o carrinho vazio ele não é exibido (RI03). */
+  /** Badge com a quantidade; com o carrinho vazio ele não é exibido */
   validarQuantidadeNoCarrinho(quantidade) {
     if (quantidade === 0) {
       this.elements.badgeCarrinho().should('not.exist');
@@ -33,4 +33,4 @@ class Cabecalho {
   }
 }
 
-export default new Cabecalho();
+export default new Header();

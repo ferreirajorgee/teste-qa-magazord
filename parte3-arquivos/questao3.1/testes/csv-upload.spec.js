@@ -9,13 +9,14 @@
  * regra de negócio, duplicata nem relacionamento a validar no servidor
  * (gaps G01 e G02). Por isso, cada cenário separa duas coisas:
  * 1. O arquivo: gerado ou lido da fixture e conferido antes do upload pelo
- *    validador de referência (utils/csv-validador.js), que faz o papel do
+ *    validador de referência (utils/csv-validator.js), que faz o papel do
  *    importador real e prova que o arquivo é o que o cenário diz ser.
  * 2. O site: o que ele realmente faz. Para os arquivos válidos, que o arquivo
  *    saiu íntegro do navegador (corpo multipart capturado pelo proxy do
  *    Cypress no cy.intercept, idêntico ao gerado) e que o servidor respondeu
- *    200 exibindo o nome. O site não devolve o conteúdo recebido. Para os inválidos, o comportamento
- *    observado (aceita sem validar), registrado como tal e não como acerto.
+ *    200 exibindo o nome; o site não devolve o conteúdo recebido. Para os
+ *    inválidos, o comportamento observado (aceita sem validar), registrado
+ *    como tal e não como acerto.
  *
  * - CSV gerado em memória e enviado com cy.selectFile({ contents }), sem
  *   gravar arquivo em disco. A seed vai para o Command Log e para o relatório;
@@ -27,7 +28,7 @@
  */
 import uploadPage from './pages/upload-page';
 import { TAMANHOS, gerarCsv } from './utils/csv-generator';
-import { ERROS, resumirErros, validarArquivoCsv, validarCsv } from './utils/csv-validador';
+import { ERROS, resumirErros, validarArquivoCsv, validarCsv } from './utils/csv-validator';
 import { lerArquivoEnviado } from './utils/multipart';
 import { seedInformada } from '../../../cypress/support/seed';
 

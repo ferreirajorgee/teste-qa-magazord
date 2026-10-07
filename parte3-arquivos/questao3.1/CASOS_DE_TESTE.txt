@@ -76,7 +76,7 @@ enunciado; conferidas pelo navegador e por requisição direta):
 
 Regras de referência de um importador (hipóteses de teste: o enunciado cita
 "formato, regras de negócio, duplicatas e relacionamentos" sem detalhar).
-Implementadas em testes/utils/csv-validador.js, que serve de oráculo:
+Implementadas em testes/utils/csv-validator.js, que serve de oráculo:
   RH01  Arquivo vazio é recusado (ARQUIVO_VAZIO).
   RH02  O conteúdo deve ser texto UTF-8 válido, sem byte nulo
         (CODIFICACAO_INVALIDA, CONTEUDO_BINARIO). BOM UTF-8 é aceito.
@@ -364,10 +364,12 @@ Gaps:
   G02  Não há entidades relacionadas nem regra de duplicata no servidor.
        Relacionamentos não têm caso automatizado; duplicatas são validadas
        só no arquivo (RH08). Estratégia em 3.1.a e 3.1.b.
-  G03  As regras RH01-RH08 são hipóteses (o enunciado não detalha o
-       formato aceito). Em um projeto real, devem ser confirmadas com PO/Dev:
-       separador aceito, encoding, campos obrigatórios, faixa de idade,
-       chave de duplicata, rejeição parcial ou total.
+  G03  As regras RH01-RH08 foram adotadas como premissa, porque o enunciado
+       não detalha o formato aceito. Os pontos definidos por premissa são:
+       separador vírgula, encoding UTF-8, todos os campos obrigatórios, idade
+       inteira não negativa, e-mail como chave de duplicata e rejeição por
+       linha (as válidas seguem), exceto cabeçalho inválido, que recusa o
+       arquivo inteiro.
   G04  Comportamentos observados sem regra definida (exploratório, sem
        asserção automatizada): nome de arquivo com acento exibido com a
        codificação errada (RI04); limite de tamanho não documentado; área de

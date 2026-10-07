@@ -13,7 +13,7 @@ export const PAGINAS = {
   CONFIRMACAO: '/checkout-complete.html',
 };
 
-/** Cookie de sessão (RI02) e chave do carrinho no localStorage (RI03). */
+/** Cookie de sessão e chave do carrinho no localStorage. */
 export const COOKIE_SESSAO = 'session-username';
 export const CHAVE_CARRINHO = 'cart-contents';
 
@@ -32,7 +32,7 @@ export function urlSauce(caminho = PAGINAS.LOGIN) {
 }
 
 /**
- * data-test dos botões de produto, pela mesma regra da aplicação (RI04):
+ * data-test dos botões de produto, pela mesma regra da aplicação:
  * `idDoBotao('add-to-cart', backpack)` -> "add-to-cart-sauce-labs-backpack".
  */
 export function idDoBotao(acao, produto) {

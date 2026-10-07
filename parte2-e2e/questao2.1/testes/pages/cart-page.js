@@ -1,5 +1,5 @@
-import { PAGINAS, idDoBotao } from '../utils/rotas';
-import cabecalho from './cabecalho';
+import { PAGINAS, idDoBotao } from '../utils/routes';
+import header from './header';
 
 class CartPage {
   elements = {
@@ -11,7 +11,7 @@ class CartPage {
   };
 
   validarAberta() {
-    cabecalho.validarPagina(PAGINAS.CARRINHO, 'Your Cart');
+    header.validarPagina(PAGINAS.CARRINHO, 'Your Cart');
   }
 
   remover(produto) {

@@ -21,7 +21,7 @@ Pedidos e estoque recebem os cenários de falha mais completos; publicação rec
 
 **1. Integração substituível por configuração.** Cada marketplace tem um adaptador próprio, com URL base, credenciais e timeouts vindos do ambiente. Em teste, a URL aponta para o mock server ou para o sandbox do marketplace.
 
-**2. Barreiras contra produção**, independentes entre si: ambientes de teste sem credenciais de produção (uma chamada indevida falha em vez de publicar); lista de hosts permitidos e bloqueio de saída para os hosts de produção; dados com prefixo identificável no SKU e no título, como os cupons `E2E-` da Parte 2.1.
+**2. Barreiras contra produção**, independentes entre si: ambientes de teste sem credenciais de produção (uma chamada indevida falha em vez de publicar); lista de hosts permitidos e bloqueio de saída para os hosts de produção; dados com prefixo identificável no SKU e no título (por exemplo `E2E-`), para localizar e limpar o que o teste criou.
 
 **3. Camadas.**
 
@@ -57,19 +57,48 @@ O ponto decisivo é **quem faz a chamada**: as chamadas saem do backend, não do
 
 **3. JSON Server descartado:** não simula falhas nem verifica requisições, o que daria falsa sensação de cobertura. **MSW e `cy.intercept`** simulam o nosso backend para a tela do lojista, como nas Partes 2 e 3, e não o marketplace.
 
-**4. Organização.** Stubs versionados por marketplace; respostas gravadas no sandbox (modo record do WireMock), sem dados pessoais nem tokens, porque resposta escrita "de cabeça" é a principal causa de mock irreal; conjunto base para o caminho feliz e stubs por teste registrados pela API administrativa; isolamento em paralelo por SKUs e ids próprios gerados com seed; fixtures dos stubs validadas contra o schema.
+**4. Organização dos stubs.**
+
+- versionados por marketplace, junto com o código de teste;
+- respostas gravadas no sandbox (modo record do WireMock) e limpas de dados pessoais e tokens. Resposta escrita "de cabeça" é a principal causa de mock irreal;
+- um conjunto base para o caminho feliz, e stubs específicos registrados por cada teste pela API administrativa do WireMock;
+- isolamento em execução paralela por SKUs e ids próprios de cada teste, gerados com seed;
+- fixtures dos stubs validadas contra o schema (5.1.d), para o mock não divergir da API real.
 
 ---
 
 ## 5.1.c) Como simular 500, timeout e 429 e o que validar
 
-O sistema precisa **distinguir** os três, como a Parte 1.1 distinguiu 403 de rate limit e 403 de permissão. A simulação no WireMock: `status: 500` (e 502/503), com scenario 500, 500, 200 para recuperação; atraso maior que o timeout de leitura (`fixedDelayMilliseconds`) e `fault` para conexão resetada ou resposta vazia, com Toxiproxy para cortar a conexão no meio; `status: 429` com e sem `Retry-After`. O tempo não é esperado de verdade: backoff e `Retry-After` são testados injetando o "agora" como parâmetro, como nas funções de token da Parte 1.1.
+O sistema precisa **distinguir** os três, porque cada um pede uma reação diferente (o mesmo cuidado da Parte 1.1, que separa o 403 de rate limit do 403 de permissão). No WireMock, a simulação é feita assim:
 
-**1. 500: falha provavelmente temporária.** Repete com **backoff exponencial com jitter** e limite de tentativas, com o número exato de chamadas conferido no journal; esgotadas as tentativas, vai para DLQ ou status de erro visível ao lojista, nunca descartada em silêncio; a falha no produto A não trava B e C; o **circuit breaker** abre após falhas consecutivas e reabre aos poucos. Como contraste, 400/422 **não** é repetido: o payload inválido nunca vai passar.
+- **500**: `status: 500` (e 502/503), com um scenario 500, 500, 200 para testar a recuperação;
+- **timeout**: atraso maior que o timeout de leitura (`fixedDelayMilliseconds`) e `fault` para conexão resetada ou resposta vazia. O Toxiproxy corta a conexão no meio da resposta;
+- **429**: `status: 429`, com e sem o header `Retry-After`.
 
-**2. Timeout: resultado desconhecido.** É o mais perigoso: o marketplace pode ter processado. O cliente tem timeout finito e libera o worker. O teste simula "gravou, mas respondeu depois do timeout" e valida que a publicação **não duplica o anúncio** (consulta por SKU antes de repetir, ou chave de idempotência quando a API oferece); que estoque e preço são enviados como valores absolutos, seguros de repetir; que um reenvio atrasado de R$ 100 não sobrescreve o R$ 90 mais novo; e que o pedido cuja consulta falhou volta para a fila.
+O tempo não é esperado de verdade: backoff e `Retry-After` são testados com o "agora" injetado como parâmetro, então o teste não fica parado aguardando.
 
-**3. 429: o marketplace pediu para esperar.** Respeita o `Retry-After` quando presente e usa backoff com jitter quando ausente; controla o ritmo **por operação**, já que a SP-API define limites por operação no modelo de token bucket (um 429 em preço não pode parar pedidos); prioriza pedidos e estoque sobre preço e publicação; não conta como falha para o circuit breaker nem para a DLQ. A decisão "é rate limit e quanto esperar" segue a ideia da função pura da Parte 1.1 (`rateLimitAtingido`), aplicada aos headers dos marketplaces.
+**1. 500: falha provavelmente temporária.** O que valido:
+
+- nova tentativa com **backoff exponencial com jitter** e limite de tentativas, conferindo no journal o número exato de chamadas;
+- esgotadas as tentativas, a mensagem vai para DLQ ou para um status de erro visível ao lojista, nunca é descartada em silêncio;
+- a falha no produto A não trava os produtos B e C;
+- o **circuit breaker** abre após falhas consecutivas e volta a liberar aos poucos.
+
+Como contraste, 400/422 **não** é repetido: um payload inválido nunca vai passar.
+
+**2. Timeout: resultado desconhecido.** É o caso mais perigoso, porque o marketplace pode ter processado a requisição. O cliente precisa de timeout finito para liberar o worker. O teste simula "gravou, mas respondeu depois do timeout" e valida que:
+
+- a publicação **não duplica o anúncio** (consulta por SKU antes de repetir, ou chave de idempotência quando a API oferece);
+- estoque e preço são enviados como valores absolutos, seguros de repetir;
+- um reenvio atrasado de R$ 100 não sobrescreve o R$ 90 enviado depois;
+- o pedido cuja consulta falhou volta para a fila.
+
+**3. 429: o marketplace pediu para esperar.** O que valido:
+
+- respeita o `Retry-After` quando presente e usa backoff com jitter quando ausente;
+- controla o ritmo **por operação**, já que a SP-API define limites por operação no modelo de token bucket. Um 429 em preço não pode parar pedidos;
+- prioriza pedidos e estoque sobre preço e publicação;
+- não conta como falha para o circuit breaker nem para a DLQ.
 
 | Erro    | Repete?                                            | Principal risco validado                    |
 | ------- | -------------------------------------------------- | ------------------------------------------- |
@@ -119,9 +148,11 @@ O sistema precisa **distinguir** os três, como a Parte 1.1 distinguiu 403 de ra
 
 ---
 
-### Pontos não informados no enunciado
+### Premissas adotadas
 
-1. **Arquitetura da integração** (síncrona ou fila com workers): retry, DLQ e prioridade pressupõem fila.
-2. **Fonte da verdade do estoque entre canais**, inclusive estoque reservado por pedido não confirmado.
-3. **Comportamento após esgotar tentativas**: alerta ao lojista, reprocessamento manual ou automático.
-4. **Acesso a contas de teste** nos marketplaces, necessário para a camada de sandbox.
+O enunciado não detalha alguns pontos que mudam a estratégia. Para responder, assumi:
+
+1. **Arquitetura da integração**: assíncrona, com fila e workers. É o que torna possível retry, DLQ e prioridade entre operações.
+2. **Fonte da verdade do estoque**: o sistema da loja, e não o marketplace. O estoque enviado a cada canal já desconta as reservas de pedidos ainda não confirmados.
+3. **Após esgotar as tentativas**: a mensagem vai para a DLQ, o lojista é alertado no painel e o reprocessamento é manual.
+4. **Contas de teste**: disponíveis nos sandboxes dos dois marketplaces, o que viabiliza a camada de sandbox da estratégia.

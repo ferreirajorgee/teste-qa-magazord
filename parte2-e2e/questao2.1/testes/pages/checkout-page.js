@@ -1,6 +1,6 @@
-import { PAGINAS } from '../utils/rotas';
-import { paraCentavos } from '../utils/valores';
-import cabecalho from './cabecalho';
+import { PAGINAS } from '../utils/routes';
+import { paraCentavos } from '../utils/prices';
+import header from './header';
 
 /**
  * Page Object das três etapas do checkout do SauceDemo:
@@ -41,12 +41,12 @@ class CheckoutPage {
   // -------------------------------------------------------------------------
 
   validarInformacoesAberta() {
-    cabecalho.validarPagina(PAGINAS.INFORMACOES, 'Checkout: Your Information');
+    header.validarPagina(PAGINAS.INFORMACOES, 'Checkout: Your Information');
   }
 
   /**
    * Preenche nome, sobrenome e CEP. Campo com valor vazio fica em branco,
-   * o que permite montar os cenários de campo obrigatório (CT-CK-06).
+   * o que permite montar os cenários de campo obrigatório.
    */
   preencherComprador({ firstName, lastName, postalCode }) {
     Object.entries({ firstName, lastName, postalCode }).forEach(([campo, valor]) => {
@@ -62,7 +62,7 @@ class CheckoutPage {
     this.elements.botaoContinuar().click();
   }
 
-  /** Cancel existe nas etapas Your Information e Overview, com destinos diferentes (RI10). */
+  /** Cancel existe nas etapas Your Information e Overview, com destinos diferentes. */
   cancelar() {
     this.elements.botaoCancelar().click();
   }
@@ -72,7 +72,7 @@ class CheckoutPage {
   // -------------------------------------------------------------------------
 
   validarResumoAberto() {
-    cabecalho.validarPagina(PAGINAS.RESUMO, 'Checkout: Overview');
+    header.validarPagina(PAGINAS.RESUMO, 'Checkout: Overview');
   }
 
   /**
@@ -125,7 +125,7 @@ class CheckoutPage {
   // -------------------------------------------------------------------------
 
   validarConfirmacaoAberta() {
-    cabecalho.validarPagina(PAGINAS.CONFIRMACAO, 'Checkout: Complete!');
+    header.validarPagina(PAGINAS.CONFIRMACAO, 'Checkout: Complete!');
   }
 
   voltarParaProdutos() {

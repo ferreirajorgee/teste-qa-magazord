@@ -1,13 +1,13 @@
 /**
  * Helper da Questão 2.1: estado do navegador (sessão, carrinho e limpeza).
  */
-import { CHAVE_CARRINHO, COOKIE_SESSAO, PAGINAS, urlSauce } from './rotas';
+import { CHAVE_CARRINHO, COOKIE_SESSAO, PAGINAS, urlSauce } from './routes';
 
 /**
  * Abre `pagina` já logado e com `produtos` no carrinho, gravando o cookie de
  * sessão e o localStorage como a própria aplicação faz. Usado nos cenários
- * em que login e inclusão de produtos não são o objeto do teste (estratégia,
- * decisão 1). O login pela interface é coberto pelo CT-CK-01 e CT-CK-02.
+ * em que login e inclusão de produtos não são o objeto do teste. O login pela
+ * interface é coberto pelos testes de fluxo completo.
  */
 export function prepararSessao({ produtos = [], pagina = PAGINAS.PRODUTOS } = {}) {
   return cy.env(['SAUCE_USERNAME']).then(({ SAUCE_USERNAME }) => {
@@ -50,7 +50,7 @@ export function validarCarrinhoArmazenado(produtos) {
 }
 
 /**
- * Limpeza do navegador (RN04): cookies, localStorage e sessionStorage de
+ * Limpeza do navegador: cookies, localStorage e sessionStorage de
  * todas as origens. As versões "All" funcionam com qualquer página aberta,
  * inclusive antes do primeiro cy.visit do teste.
  */

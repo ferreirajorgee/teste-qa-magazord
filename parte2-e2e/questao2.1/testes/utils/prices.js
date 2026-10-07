@@ -23,7 +23,7 @@ export function formatarCentavos(centavos) {
   return (centavos / 100).toFixed(2);
 }
 
-/** Totais esperados do resumo (RI06): Tax = 8% do Item total, em 2 casas. */
+/** Totais esperados do resumo: Tax = 8% do Item total, em 2 casas. */
 export function calcularTotais(precosEmCentavos) {
   const itemTotal = precosEmCentavos.reduce((soma, preco) => soma + preco, 0);
   const tax = Math.round(itemTotal * TAXA_IMPOSTO);

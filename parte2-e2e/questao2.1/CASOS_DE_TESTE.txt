@@ -182,7 +182,7 @@ CT-CK-11  Continuar comprando e incluir mais produtos      Positivo  P2     E2E 
 CT-CK-12  Login inválido não acessa a loja                 Negativo  P2     E2E UI     I1
 CT-IS-01  Teste seguinte começa sem sessão e sem carrinho  Positivo  P0     E2E UI     I4
 CT-IS-02  Checkout sem sessão volta ao login               Negativo  P1     E2E UI     I4
-CT-IS-03  Checkout abandonado não vaza para o próximo    Borda     P2     E2E UI     I4
+CT-IS-03  Checkout abandonado não vaza para o próximo      Borda     P2     E2E UI     I4
 
 (*) Estado inicial preparado direto no navegador (cookie e localStorage), sem
     repetir o login e a inclusão de produtos pela interface.

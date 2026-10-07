@@ -1,9 +1,9 @@
 /**
  * Catálogo do SauceDemo usado nos cenários (observado em 06/10/2026).
  *
- * `id` é o valor gravado no localStorage "cart-contents" (RI03), usado para
+ * `id` é o valor gravado no localStorage "cart-contents", usado para
  * preparar o carrinho sem passar pela interface. Os preços não ficam aqui:
- * os valores esperados vêm do preço exibido na tela (RP02) e da tabela de
+ * os valores esperados vêm do preço exibido na tela e da tabela de
  * referência abaixo.
  */
 export const PRODUTOS = {
@@ -16,7 +16,7 @@ export const PRODUTOS = {
 };
 
 /**
- * Tabela de controle do CT-CK-03 e do CT-CK-08 (Tax = 8% do Item total, 2 casas). Se o
+ * Tabela de controle dos cenários de totais (Tax = 8% do Item total, 2 casas). Se o
  * catálogo mudar de preço, o cenário falha e sinaliza a mudança.
  */
 export const TOTAIS_REFERENCIA = {

@@ -58,7 +58,13 @@ Cada recurso tem duas perguntas: o app reage certo ao que o recurso entrega (tes
 
 As fixtures têm propósito único, como as da Parte 3 (válida, grande demais, formato não suportado, código ilegível), e permissão negada é caso obrigatório.
 
-**3. Push.** Três partes, testadas separadamente: o **backend** gera o payload certo, com APNs e FCM substituídos por mock server (Parte 5); o **app** trata o payload, via `xcrun simctl push <device> <bundleId> payload.apns` no iOS e envio pelo FCM ao emulador com Google Play Services (ou receptor de teste acionado por `adb shell am broadcast`) no Android; a **entrega real** fica em poucos cenários em dispositivo real. No app, para cada estado (aberto, fundo, encerrado), valido conteúdo exibido, toque abrindo a tela certa (deep link testado também isolado, por `simctl openurl` ou `adb shell am start -d`), payload incompleto sem derrubar o app e permissão negada (`POST_NOTIFICATIONS` no Android 13+).
+**3. Push.** Divido o push em três partes, testadas separadamente:
+
+- **backend**: gera o payload certo. APNs e FCM são substituídos por mock server (Parte 5);
+- **app**: trata o payload recebido. No iOS, com `xcrun simctl push <device> <bundleId> payload.apns`; no Android, com envio pelo FCM ao emulador com Google Play Services ou por um receptor de teste acionado via `adb shell am broadcast`;
+- **entrega real**: poucos cenários em dispositivo real.
+
+No app, para cada estado (aberto, em segundo plano, encerrado), valido o conteúdo exibido, o toque abrindo a tela certa, um payload incompleto que não derruba o app e a permissão negada (`POST_NOTIFICATIONS` no Android 13+). O deep link aberto pelo toque também é testado isoladamente, com `simctl openurl` ou `adb shell am start -d`.
 
 ---
 
@@ -80,13 +86,20 @@ As fixtures têm propósito único, como as da Parte 3 (válida, grande demais, 
 | `abrirDeepLink`      | `simctl openurl`       | `adb shell am start -d`                |
 | `definirRede`        | Toxiproxy (4.1.e)      | `adb` (modo avião, Wi-Fi) ou Toxiproxy |
 
-Os diálogos de permissão do sistema também ficam nele. Massa, payloads de push e respostas do mock são únicos para as duas plataformas, e o que só existe em uma vira tag (`@ios`, `@android`), como o `@smoke` deste projeto.
+Os diálogos de permissão do sistema também ficam nele. Massa, payloads de push e respostas do mock são únicos para as duas plataformas, e o que só existe em uma delas é marcado com tag (`@ios`, `@android`) e filtrado na execução.
 
 ---
 
 ## 4.1.d) Setup de ambiente local e em CI/CD
 
-**1. Local.** Node fixado, JDK, Android SDK com imagem Google APIs (para FCM) e, para iOS, macOS com Xcode. Appium com versão fixa no `package.json` e drivers instalados por comando (`appium driver install xcuitest`, `appium driver install uiautomator2`, verificados com `appium driver doctor`). AVD e simulador criados por script com modelo e versão definidos. Build de teste do app (flavor Android e `xcodebuild -sdk iphonesimulator`) apontando para o mock server, com câmera e push de teste e animações desligadas. Mock server (WireMock) por `docker compose`; o emulador acessa o host por `10.0.2.2`. Configuração por variável de ambiente, como os `CYPRESS_*` daqui.
+**1. Local.** O objetivo é que qualquer pessoa do time suba o ambiente com um script, sem passos manuais:
+
+- ferramentas com versão fixa: Node, JDK, Android SDK com imagem Google APIs (necessária para FCM) e, para iOS, macOS com Xcode;
+- Appium fixado no `package.json` e drivers instalados por comando (`appium driver install xcuitest`, `appium driver install uiautomator2`), conferidos com `appium driver doctor`;
+- AVD e simulador criados por script, com modelo e versão de SO definidos;
+- build de teste do app (flavor no Android, `xcodebuild -sdk iphonesimulator` no iOS) apontando para o mock server, com câmera e push de teste e animações desligadas;
+- mock server (WireMock) via `docker compose`. O emulador Android acessa o host pelo endereço `10.0.2.2`;
+- URLs e credenciais por variável de ambiente, nunca no código.
 
 **2. CI/CD.**
 
@@ -98,7 +111,14 @@ Os diálogos de permissão do sistema também ficam nele. Massa, payloads de pus
 | E2E completo, com shards | Mesmos runners                                    | Merge e noturno       |
 | Dispositivos reais       | Device farm, matriz pequena de aparelhos          | Noturno e pré-release |
 
-**3. Na prática:** runners macOS são caros, por isso o iOS no PR roda só o smoke; cache de Gradle, Pods, `node_modules` e snapshot do AVD; dispositivo limpo a cada job, porque storage offline que vaza entre testes é a maior causa de falha intermitente; screenshot, vídeo, logs do dispositivo e do Appium e journal do mock no relatório; `retries: 0` com quarentena para teste instável; segredos de device farm e de FCM/APNs só no CI.
+**3. Cuidados que fazem diferença no dia a dia:**
+
+- runners macOS são caros, por isso o iOS roda só o smoke no PR;
+- cache de Gradle, Pods, `node_modules` e snapshot do AVD, para reduzir o tempo de pipeline;
+- dispositivo limpo a cada job: storage offline que vaza entre testes é a maior causa de falha intermitente em mobile;
+- screenshot, vídeo, logs do dispositivo e do Appium e journal do mock anexados ao relatório;
+- `retries: 0`, com quarentena para teste instável em vez de nova tentativa automática;
+- segredos de device farm e de FCM/APNs apenas no cofre do CI.
 
 ---
 
@@ -118,7 +138,7 @@ O risco central é o da Parte 3: **perda silenciosa**. A tela diz "salvo" e o da
 | Voltar a ficar online                     | Fila enviada em ordem, journal com exatamente as operações esperadas, pendências zeradas         |
 | Encerrar o app com fila pendente          | Fila persistida após reabrir e enviada                                                           |
 | Queda no meio da sync ou resposta perdida | Nada já confirmado é reenviado; reenvio com a mesma chave de idempotência gera uma única criação |
-| Conflito (alterado no servidor e no app)  | Aplica a regra definida pelo PO e avisa o usuário quando necessário                              |
+| Conflito (alterado no servidor e no app)  | Aplica a regra de conflito adotada (ver premissas) e avisa o usuário quando descarta uma edição  |
 | 500, 429 e 401 durante a sync             | Backoff sem perder a fila; respeita `Retry-After`; renova sessão uma vez                         |
 | Alteração e exclusão feitas no servidor   | Refletidas no app após a sync                                                                    |
 
@@ -126,9 +146,11 @@ O risco central é o da Parte 3: **perda silenciosa**. A tela diz "salvo" e o da
 
 ---
 
-### Pontos não informados no enunciado
+### Premissas adotadas
 
-1. **Stack do app**: define se Detox é opção e qual framework nativo cobre a camada intermediária.
-2. **Regra de conflito na sincronização**: sem ela, o cenário de conflito não tem resultado esperado.
-3. **Uso da câmera** (foto livre, documento, código de barras): define fixtures e validações de imagem.
-4. **Matriz de dispositivos e versões de SO**: define a device farm e o custo da execução noturna.
+O enunciado não detalha alguns pontos que mudam a estratégia. Para responder, assumi:
+
+1. **Stack do app**: desconhecida. Por isso a escolha é o Appium, que atende qualquer stack; se o app for React Native, o Detox entra como alternativa (4.1.a).
+2. **Regra de conflito na sincronização**: a alteração mais recente prevalece, pelo horário do servidor, e o usuário é avisado quando uma edição local é descartada. É essa regra que dá o resultado esperado ao cenário de conflito.
+3. **Uso da câmera**: captura de foto livre (por exemplo, foto de produto), o que define as fixtures de imagem.
+4. **Matriz de dispositivos**: as duas últimas versões principais de iOS e Android, em um aparelho de entrada e um intermediário por plataforma, para manter a execução noturna na device farm com custo controlado.

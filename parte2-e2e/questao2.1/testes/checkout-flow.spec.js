@@ -30,7 +30,7 @@
  * os comportamentos sem regra definida (checkout com carrinho vazio, campos
  * só com espaços, formato do CEP).
  */
-import cabecalho from './pages/cabecalho';
+import header from './pages/header';
 import cartPage from './pages/cart-page';
 import checkoutPage from './pages/checkout-page';
 import inventoryPage from './pages/inventory-page';
@@ -41,15 +41,15 @@ import {
   gerarComprador,
   gerarSenhaInvalida,
 } from './fixtures/checkout-data';
-import { PRODUTOS, TOTAIS_REFERENCIA } from './fixtures/produtos';
+import { PRODUTOS, TOTAIS_REFERENCIA } from './fixtures/products';
 import {
   limparNavegador,
   prepararSessao,
   validarCarrinhoArmazenado,
   validarNavegadorLimpo,
 } from './utils/checkout-helper';
-import { COOKIE_SESSAO, PAGINAS, urlSauce } from './utils/rotas';
-import { calcularTotais, formatarCentavos } from './utils/valores';
+import { COOKIE_SESSAO, PAGINAS, urlSauce } from './utils/routes';
+import { calcularTotais, formatarCentavos } from './utils/prices';
 import { seedInformada } from '../../../cypress/support/seed';
 
 const PAGAMENTO = 'SauceCard #31337';
@@ -154,9 +154,9 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
         inventoryPage.validarAberta();
 
         inventoryPage.adicionar(PRODUTOS.BACKPACK);
-        cabecalho.validarQuantidadeNoCarrinho(1);
+        header.validarQuantidadeNoCarrinho(1);
 
-        cabecalho.abrirCarrinho();
+        header.abrirCarrinho();
         cartPage.validarAberta();
         cartPage.iniciarCheckout();
         avancarAteOResumo(comprador);
@@ -194,9 +194,9 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
           });
           inventoryPage.adicionar(produto);
         });
-        cabecalho.validarQuantidadeNoCarrinho(produtos.length);
+        header.validarQuantidadeNoCarrinho(produtos.length);
 
-        cabecalho.abrirCarrinho();
+        header.abrirCarrinho();
         cartPage.validarAberta();
         cartPage.iniciarCheckout();
         avancarAteOResumo(comprador);
@@ -255,7 +255,7 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
 
         cartPage.remover(PRODUTOS.BIKE_LIGHT);
         validarNomesExibidos(cartPage.elements.nomesDosItens(), [PRODUTOS.BACKPACK.nome]);
-        cabecalho.validarQuantidadeNoCarrinho(1);
+        header.validarQuantidadeNoCarrinho(1);
 
         cartPage.iniciarCheckout();
         avancarAteOResumo(compradorDoTeste());
@@ -288,7 +288,7 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
         checkoutPage.finalizar();
 
         validarConfirmacaoDoPedido();
-        cabecalho.validarQuantidadeNoCarrinho(0);
+        header.validarQuantidadeNoCarrinho(0);
         validarCarrinhoArmazenado(null);
 
         checkoutPage.voltarParaProdutos();
@@ -297,7 +297,7 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
         inventoryPage.elements.itens().each(($item) => {
           cy.wrap($item).find('button').should('have.text', 'Add to cart');
         });
-        cabecalho.validarQuantidadeNoCarrinho(0);
+        header.validarQuantidadeNoCarrinho(0);
       },
     );
   });
@@ -373,17 +373,17 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
       () => {
         prepararSessao();
         inventoryPage.validarAberta();
-        cabecalho.validarQuantidadeNoCarrinho(0);
+        header.validarQuantidadeNoCarrinho(0);
 
         inventoryPage.adicionar(PRODUTOS.BACKPACK);
         inventoryPage.adicionar(PRODUTOS.BIKE_LIGHT);
-        cabecalho.validarQuantidadeNoCarrinho(2);
+        header.validarQuantidadeNoCarrinho(2);
         [PRODUTOS.BACKPACK, PRODUTOS.BIKE_LIGHT].forEach((produto) => {
           inventoryPage.elements.botaoRemover(produto).should('have.text', 'Remove');
         });
 
         inventoryPage.remover(PRODUTOS.BIKE_LIGHT);
-        cabecalho.validarQuantidadeNoCarrinho(1);
+        header.validarQuantidadeNoCarrinho(1);
         validarCarrinhoArmazenado([PRODUTOS.BACKPACK]);
       },
     );
@@ -399,7 +399,7 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
 
         cartPage.validarAberta();
         validarNomesExibidos(cartPage.elements.nomesDosItens(), [PRODUTOS.BACKPACK.nome]);
-        cabecalho.validarQuantidadeNoCarrinho(1);
+        header.validarQuantidadeNoCarrinho(1);
       },
     );
 
@@ -416,7 +416,7 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
         // Finalizar esvazia o carrinho (CT-CK-04); com os 2 itens ainda
         // gravados, o pedido não foi finalizado.
         inventoryPage.validarAberta();
-        cabecalho.validarQuantidadeNoCarrinho(2);
+        header.validarQuantidadeNoCarrinho(2);
         validarCarrinhoArmazenado(produtos);
       },
     );
@@ -431,9 +431,9 @@ describe('Questão 2.1 - Fluxo de checkout (SauceDemo)', () => {
         cartPage.continuarComprando();
         inventoryPage.validarAberta();
         inventoryPage.adicionar(PRODUTOS.BIKE_LIGHT);
-        cabecalho.validarQuantidadeNoCarrinho(2);
+        header.validarQuantidadeNoCarrinho(2);
 
-        cabecalho.abrirCarrinho();
+        header.abrirCarrinho();
         cartPage.validarAberta();
         validarNomesExibidos(cartPage.elements.nomesDosItens(), [
           PRODUTOS.BACKPACK.nome,
@@ -507,7 +507,7 @@ describe('Questão 2.1 - Isolamento e limpeza entre testes', { testIsolation: fa
       inventoryPage.adicionar(PRODUTOS.BACKPACK);
       inventoryPage.adicionar(PRODUTOS.BIKE_LIGHT);
 
-      cabecalho.validarQuantidadeNoCarrinho(2);
+      header.validarQuantidadeNoCarrinho(2);
       cy.getCookie(COOKIE_SESSAO).should('exist');
       validarCarrinhoArmazenado([PRODUTOS.BACKPACK, PRODUTOS.BIKE_LIGHT]);
     },
@@ -523,8 +523,20 @@ describe('Questão 2.1 - Isolamento e limpeza entre testes', { testIsolation: fa
       loginPage.visitar();
       loginPage.entrarComUsuarioPadrao();
       inventoryPage.validarAberta();
-      cabecalho.validarQuantidadeNoCarrinho(0);
+      header.validarQuantidadeNoCarrinho(0);
       validarCarrinhoArmazenado(null);
+    },
+  );
+
+  it(
+    'CT-IS-02 - Deve voltar ao login ao abrir o checkout sem sessão',
+    { tags: ['@isolamento', '@negativo'] },
+    () => {
+      // Começa limpo pelo afterEach do teste anterior (não há beforeEach aqui).
+      cy.getCookie(COOKIE_SESSAO).should('be.null');
+
+      validarAcessoNegado(PAGINAS.INFORMACOES);
+      cy.getCookie(COOKIE_SESSAO).should('be.null');
     },
   );
 
@@ -561,18 +573,6 @@ describe('Questão 2.1 - Isolamento e limpeza entre testes', { testIsolation: fa
       // Sem a sessão, o resumo abandonado não pode ser retomado.
       validarAcessoNegado(PAGINAS.RESUMO);
       validarCarrinhoArmazenado(null);
-    },
-  );
-
-  it(
-    'CT-IS-02 - Deve voltar ao login ao abrir o checkout sem sessão',
-    { tags: ['@isolamento', '@negativo'] },
-    () => {
-      // Começa limpo pelo afterEach do teste anterior (não há beforeEach aqui).
-      cy.getCookie(COOKIE_SESSAO).should('be.null');
-
-      validarAcessoNegado(PAGINAS.INFORMACOES);
-      cy.getCookie(COOKIE_SESSAO).should('be.null');
     },
   );
 });

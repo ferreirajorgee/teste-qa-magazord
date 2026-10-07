@@ -1,6 +1,6 @@
 # Questão 3.1 - Importação de CSV
 
-Implementação: [`testes/csv-upload.spec.js`](testes/csv-upload.spec.js), [`testes/utils/csv-generator.js`](testes/utils/csv-generator.js) e [`testes/utils/csv-validador.js`](testes/utils/csv-validador.js).
+Implementação: [`testes/csv-upload.spec.js`](testes/csv-upload.spec.js), [`testes/utils/csv-generator.js`](testes/utils/csv-generator.js) e [`testes/utils/csv-validator.js`](testes/utils/csv-validator.js).
 Casos de teste, prioridades e rastreabilidade: [`CASOS_DE_TESTE.txt`](CASOS_DE_TESTE.txt).
 
 ## Premissa: o site do teste prático não importa nada
@@ -17,8 +17,8 @@ O contexto da questão descreve um importador que lê CSVs de 1000+ linhas e val
 
 Por isso a automação separa duas perguntas, e nunca as mistura em uma asserção:
 
-1. **O arquivo é o que o cenário diz ser?** Respondida pelo validador de referência (`csv-validador.js`), que implementa o que um importador real deveria verificar e serve de oráculo: o CSV gerado tem exatamente N linhas válidas e e-mails únicos; a fixture "malformada" tem exatamente os 8 defeitos esperados, nas linhas esperadas.
-2. **O que o site faz com ele?** Respondida pelo upload real. Para os válidos, o teste prova que o arquivo **saiu íntegro do navegador** (o corpo multipart capturado pelo proxy do Cypress, no `cy.intercept`, é idêntico no texto ao CSV gerado) e que o servidor respondeu 200 exibindo o nome. O que o servidor fez com o conteúdo não é observável: o site não o devolve. Para os inválidos, registra o comportamento observado (aceita sem validar) como comportamento observado, e não como acerto do site.
+1. **O arquivo é o que o cenário diz ser?** Respondida pelo validador de referência (`csv-validator.js`), que implementa o que um importador real deveria verificar e serve de oráculo: o CSV gerado tem exatamente N linhas válidas e e-mails únicos; a fixture "malformada" tem exatamente os 8 defeitos esperados, nas linhas esperadas.
+2. **O que o site faz com ele?** Respondida pelo upload real. Para os válidos, o teste prova que o arquivo **saiu íntegro do navegador** (o corpo multipart capturado pelo proxy do Cypress, no `cy.intercept`, é idêntico no texto ao CSV gerado) e que o servidor respondeu 200 exibindo o nome. O que o servidor fez com o conteúdo não é observável: o site não o devolve. Para os inválidos, o teste registra o que o site faz (aceita sem validar) como comportamento observado, e não como acerto.
 
 As respostas abaixo descrevem a estratégia para um importador real e indicam o que foi aplicado no teste prático.
 
@@ -37,7 +37,7 @@ O teste gera o próprio arquivo, com dados determinísticos e rastreáveis:
 - antes do upload, o próprio teste confere o arquivo (CT-UP-01): 1001 linhas físicas, cabeçalho, 1000 registros válidos, 1000 e-mails distintos, UTF-8 com mais bytes que caracteres. Se o arquivo de entrada estiver errado, o teste falha ali, e não depois, com uma divergência impossível de diagnosticar.
 
 **2. Reconciliação de contagens (a asserção principal).**
-Todo importador sério devolve um resumo do processamento (na resposta da API, em um job de importação ou em um relatório). O teste valida a equação de fechamento:
+Um importador bem construído devolve um resumo do processamento (na resposta da API, em um job de importação ou em um relatório). O teste valida a equação de fechamento:
 
 ```text
 lidas = inseridas + atualizadas + rejeitadas + ignoradas

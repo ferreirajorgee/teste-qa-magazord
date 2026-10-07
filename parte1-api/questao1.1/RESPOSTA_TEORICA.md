@@ -92,7 +92,7 @@ As credenciais vêm de `cy.env()`, que não as registra no Command Log.
 ### Comportamento atual do ReqRes (observado em 06/10/2026)
 
 1. **`x-api-key`**: todas as chamadas ao ReqRes enviam `x-api-key: reqres-free-v1`, como pede a documentação atual da plataforma.
-2. **`Authorization: Bearer` é recusado em `/api/users/2`**: o ReqRes passou a interpretar esse header como chave de API. Qualquer valor enviado nele, inclusive o token do `/login`, resulta em `401` com `X-Reqres-Help: missing_api_key`. O teste 3 envia o token como o enunciado pede, valida que o header saiu com o token obtido e aceita `200` (comportamento descrito no enunciado, conferindo o usuário 2) ou `401` (comportamento atual).
+2. **`Authorization: Bearer` é recusado em `/api/users/2`**: o ReqRes passou a interpretar esse header como chave de API. Qualquer valor enviado nele, inclusive o token do `/login`, resulta em `401` com `X-Reqres-Help: missing_api_key`. O teste 3 envia o token como o enunciado pede, valida que o header saiu com o token obtido e aceita `200` (comportamento descrito no enunciado, conferindo o usuário 2) ou o `401` atual, desde que venha com a assinatura conhecida (`X-Reqres-Help: missing_api_key` e `error: "missing_api_key"` no corpo). Um 401 por qualquer outro motivo falha o teste, para que uma recusa real do token não passe despercebida.
 3. **O ReqRes também tem rate limit** (20 req por minuto e limite diário na chave gratuita). A suíte faz poucas chamadas reais ao ReqRes (4 por execução).
 
 O login aceita qualquer senha para `eve.holt@reqres.in` (a API é de demonstração). Por isso não há caso de "senha incorreta": ele validaria um comportamento que o ReqRes não implementa.

@@ -1,5 +1,5 @@
 /**
- * Gerador de CSV da Questão 3.1 (RN01 e RP01 do CASOS_DE_TESTE).
+ * Gerador de CSV da Questão 3.1.
  *
  * Funções puras (sem `cy`): o mesmo CSV pode ser gerado, conferido e enviado
  * no próprio teste. Garantias do arquivo gerado:

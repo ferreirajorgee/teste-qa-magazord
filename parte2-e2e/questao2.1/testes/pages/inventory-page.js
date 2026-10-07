@@ -1,6 +1,6 @@
-import { PAGINAS, idDoBotao } from '../utils/rotas';
-import { paraCentavos } from '../utils/valores';
-import cabecalho from './cabecalho';
+import { PAGINAS, idDoBotao } from '../utils/routes';
+import { paraCentavos } from '../utils/prices';
+import header from './header';
 
 class InventoryPage {
   elements = {
@@ -11,10 +11,10 @@ class InventoryPage {
   };
 
   validarAberta() {
-    cabecalho.validarPagina(PAGINAS.PRODUTOS, 'Products');
+    header.validarPagina(PAGINAS.PRODUTOS, 'Products');
   }
 
-  /** Espera o botão trocar de estado (RI04) antes de seguir para a próxima ação. */
+  /** Espera o botão trocar de estado ("Add to cart" vira "Remove") antes de seguir para a próxima ação. */
   adicionar(produto) {
     this.elements.botaoAdicionar(produto).click();
     this.elements.botaoRemover(produto).should('be.visible');
@@ -25,7 +25,7 @@ class InventoryPage {
     this.elements.botaoAdicionar(produto).should('be.visible');
   }
 
-  /** Preço exibido do produto, em centavos (base dos valores esperados, RP02). */
+  /** Preço exibido do produto, em centavos (base dos valores esperados). */
   lerPreco(produto) {
     return this.elements
       .item(produto)

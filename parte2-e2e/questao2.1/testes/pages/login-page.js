@@ -1,4 +1,4 @@
-import { PAGINAS, urlSauce } from '../utils/rotas';
+import { PAGINAS, urlSauce } from '../utils/routes';
 
 class LoginPage {
   elements = {
@@ -19,7 +19,7 @@ class LoginPage {
     this.elements.botaoLogin().click();
   }
 
-  /** Login pela interface com as credenciais de `cy.env` (RN01, PC03). */
+  /** Login pela interface com as credenciais de `cy.env`. */
   entrarComUsuarioPadrao() {
     cy.env(['SAUCE_USERNAME', 'SAUCE_PASSWORD']).then(({ SAUCE_USERNAME, SAUCE_PASSWORD }) => {
       this.entrar(SAUCE_USERNAME, SAUCE_PASSWORD);

@@ -79,14 +79,18 @@ describe('API 2 - ReqRes (token)', () => {
             Object.entries(resposta.requestHeaders).find(
               ([nome]) => nome.toLowerCase() === 'authorization',
             ) || [];
-          expect(authorization, 'token reutilizado').to.equal(
-            `Bearer ${token}`,
-          );
+          expect(authorization, 'token reutilizado').to.equal(`Bearer ${token}`);
           // Hoje o ReqRes interpreta o Authorization como chave de API e responde 401
-          // (ver RESPOSTA_TEORICA.md, 1.1.c). Aceita 200 (comportamento do enunciado) ou 401.
+          // (ver RESPOSTA_TEORICA.md, 1.1.c). O teste aceita o 200 do enunciado ou
+          // apenas esse 401 específico; qualquer outra recusa do token falha.
           expect(resposta.status).to.be.oneOf([200, 401]);
           if (resposta.status === 200) {
             expect(resposta.body.data.id, 'usuário retornado').to.equal(2);
+          } else {
+            expect(resposta.headers['x-reqres-help'], '401 conhecido do ReqRes').to.equal(
+              'missing_api_key',
+            );
+            expect(resposta.body.error, 'motivo do 401').to.equal('missing_api_key');
           }
         });
       });
