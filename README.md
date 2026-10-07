@@ -123,6 +123,12 @@ Para mais execuções, use a chave de uma conta própria do ReqRes, fora do Git:
 │               ├── csv-generator.js # gerador de CSV (10/100/1000 linhas, faker com seed)
 │               ├── csv-validador.js # validador de referência (oráculo do importador)
 │               └── multipart.js # leitura do arquivo no corpo do POST /upload
+├── parte4-mobile/
+│   └── questao4.1/             # automação mobile (teórica)
+│       └── RESPOSTA_TEORICA.md # respostas teóricas 4.1.a a 4.1.e
+├── parte5-mocks/
+│   └── questao5.1/             # mocks de APIs de marketplaces (teórica)
+│       └── RESPOSTA_TEORICA.md # respostas teóricas 5.1.a a 5.1.e
 ├── cypress.config.js           # configuração única do Cypress
 ├── cypress.env.example.json    # modelo para credenciais locais opcionais
 ├── eslint.config.js            # regras de lint (inclui eslint-plugin-cypress)
@@ -130,6 +136,8 @@ Para mais execuções, use a chave de uma conta própria do ReqRes, fora do Git:
 ```
 
 Saídas geradas (fora do Git): `cypress/reports/`, `cypress/screenshots/` e `cypress/downloads/`.
+
+As Partes 4 (mobile) e 5 (mocks e integrações) são só teóricas: não têm specs nem script `npm run`. As respostas estão nos respectivos `RESPOSTA_TEORICA.md`.
 
 ## Observações
 
